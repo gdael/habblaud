@@ -2,7 +2,8 @@
 
 /** cwd normalizado: sem barras repetidas nem barra final. */
 export function normalizeCwd(cwd: string): string {
-  const p = cwd.trim().replace(/\/{2,}/g, '/');
+  // Letra da unidade do Windows em maiúscula: "c:\x" e "C:\x" são a mesma sala.
+  const p = cwd.trim().replace(/\/{2,}/g, '/').replace(/^[a-z]:/, (d) => d.toUpperCase());
   return p.length > 1 ? p.replace(/\/+$/, '') : p;
 }
 

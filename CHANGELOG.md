@@ -10,6 +10,11 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Corrigido
+
+- **Windows: `c:\x` e `C:\x` agora são a mesma sala.** A letra da unidade é normalizada em maiúscula, então sessões
+  abertas com caixas diferentes não criam salas duplicadas.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido
