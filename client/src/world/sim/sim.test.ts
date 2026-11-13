@@ -6,6 +6,7 @@ import type { Appearance, ArtModule, RoomTheme } from '../../art/api';
 import { DEFAULT_WORLD_OPTIONS } from '../api';
 import type { Character } from './character';
 import { SHELL_DONE_TOOL, Sim } from './sim';
+import { SERVER_THEME } from '../../art/theme';
 
 const theme: RoomTheme = {
   carpet: '#4f6d8f',
@@ -762,5 +763,55 @@ describe('espera de shell', () => {
     expect(ana.mode).toBe('shell');
     expect(ana.shellCount).toBe(1);
     expect(ana.pose).toBe('wait');
+  });
+});
+
+describe('MTC residents', () => {
+  it('a resident whose id changes (Hiraya placeholder <-> real session) keeps its character: no elevator, no leaving', () => {
+    const sim = newSim();
+    const clock = { now: T0 };
+    const rooms = [room('/v2', 0)];
+    const hir = (id: string, status: AgentInfo['status']) => agent(id, '/v2', status, { name: 'Hiraya', resident: true, seed: 42 });
+    sim.applySnapshot(snap(rooms, [hir('resident:hiraya', 'idle')]), clock.now);
+    run(sim, clock, 0.5);
+    const ch = sim.chars.get('resident:hiraya')!;
+    const home = ch.homeSpot;
+    sim.applySnapshot(snap(rooms, [hir('.claude:7', 'working')], 2), clock.now);
+    expect(sim.chars.has('resident:hiraya')).toBe(false);
+    expect(sim.chars.get('.claude:7')).toBe(ch);
+    expect(ch.id).toBe('.claude:7');
+    expect(ch.homeSpot).toBe(home);
+    expect(home && sim.spots.ownerOf(home)).toBe('.claude:7');
+    expect(sim.takeRekeyed()).toEqual(new Map([['resident:hiraya', '.claude:7']]));
+    expect(sim.takeRekeyed().size).toBe(0);
+    run(sim, clock, 5);
+    expect(sim.chars.size).toBe(1);
+    expect(ch.leaving).toBe(false);
+    expect(ch.queue.some((s) => s.t === 'elevOut') || ch.step?.t === 'elevOut').toBe(false);
+    // and back to the placeholder when the session closes
+    sim.applySnapshot(snap(rooms, [hir('resident:hiraya', 'idle')], 3), clock.now);
+    expect(sim.chars.get('resident:hiraya')).toBe(ch);
+    expect(sim.chars.size).toBe(1);
+  });
+
+  it('a non-resident agent with a new id still arrives as stock', () => {
+    const sim = newSim();
+    const clock = { now: T0 };
+    const rooms = [room('/v2', 0)];
+    sim.applySnapshot(snap(rooms, [agent('a1', '/v2', 'idle', { name: 'Ana' })]), clock.now);
+    run(sim, clock, 0.5);
+    sim.applySnapshot(snap(rooms, [agent('a2', '/v2', 'working', { name: 'Ana' })], 2), clock.now);
+    expect(sim.chars.has('a1')).toBe(true);
+    expect(sim.chars.has('a2')).toBe(true);
+  });
+
+  it("Makisig's resident room gets the dark server theme", () => {
+    const sim = newSim();
+    const r: RoomInfo = { ...room('resident:makisig', 0), name: 'Makisig' };
+    sim.applySnapshot(snap([r], []), T0);
+    expect(sim.rooms.get('resident:makisig')!.theme).toEqual(SERVER_THEME);
+    const plain: RoomInfo = { ...room('resident:talend-qa', 1), name: 'QA' };
+    sim.applySnapshot(snap([r, plain], [], 2), T0);
+    expect(sim.rooms.get('resident:talend-qa')!.theme).toEqual(theme);
   });
 });

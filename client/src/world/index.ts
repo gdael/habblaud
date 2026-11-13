@@ -253,6 +253,13 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
       // No timelapse, os horários do snapshot vão para o relógio do mundo (world/playback.ts).
       if (playback) sim.applySnapshot(rebaseSnapshot(snap, worldNow - snap.serverTime), worldNow);
       else sim.applySnapshot(snap, Date.now());
+      // MTC: a resident re-keyed (Hiraya placeholder <-> real session) keeps the selection, the open drawer and the camera.
+      const moved = sim.takeRekeyed();
+      if (moved.size) {
+        if (camera.follow && moved.has(camera.follow)) camera.follow = moved.get(camera.follow)!;
+        if (hover && moved.has(hover)) hover = moved.get(hover)!;
+        if (selection?.type === 'agent' && moved.has(selection.id)) setSelection({ type: 'agent', id: moved.get(selection.id)! });
+      }
     } catch (err) {
       console.error('[mundo] snapshot inválido ignorado', err);
     }

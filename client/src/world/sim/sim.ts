@@ -124,6 +124,8 @@ export class Sim {
   injected: { rooms: RoomInfo[]; agents: AgentInfo[] } = { rooms: [], agents: [] };
   /** Depuração: campos sobrepostos a agentes reais do snapshot (ex.: shells forçados). */
   readonly agentPatches = new Map<string, Partial<AgentInfo>>();
+  /** MTC: residents re-keyed by the last snapshots (old id -> new id), for the UI to move its selection; see takeRekeyed. */
+  private rekeyed = new Map<string, string>();
   /** Efeitos pontuais (confete) para o render desenhar; o render esvazia a lista. */
   readonly effects: WorldEffect[] = [];
   /** Festa e alarme das salas (eventos do GitHub; sim/github.ts). */
@@ -205,9 +207,10 @@ export class Sim {
     // ---- agentes
     const seen = new Set<string>();
     const fresh: Character[] = [];
+    const ids = new Set(snap.agents.map((a) => a.id));
     for (const a of snap.agents) {
       seen.add(a.id);
-      const ch = this.chars.get(a.id);
+      const ch = this.chars.get(a.id) ?? this.rekeyResident(a, ids);
       if (ch) {
         this.updateAgent(ch, a, now);
         this.social.syncAgent(ch, a, now, true);
@@ -246,13 +249,47 @@ export class Sim {
     if (this.visit) this.applyVisitLight(now, first);
   }
 
+  /**
+   * MTC: a resident whose shown id changed (Hiraya's placeholder "resident:hiraya" <-> the real session it adopts) is
+   * the same character: the one with `resident`, same room and name, whose old id left this snapshot, takes the new
+   * id (spots follow) instead of walking to the elevator while a twin arrives.
+   */
+  private rekeyResident(a: AgentInfo, ids: Set<string>): Character | undefined {
+    if (!a.resident) return undefined;
+    for (const ch of this.chars.values()) {
+      if (!ch.info.resident || ch.leaving || ch.gone || ids.has(ch.id)) continue;
+      if (ch.info.roomId !== a.roomId || ch.info.name !== a.name) continue;
+      const old = ch.id;
+      for (const s of this.spots.reservedBy(old)) {
+        this.spots.release(s, old);
+        this.spots.reserve(s, a.id);
+      }
+      ch.id = a.id;
+      this.chars.delete(old);
+      this.chars.set(a.id, ch);
+      // a chain (A -> B -> C before the UI looked) collapses to A -> C
+      for (const [k, v] of this.rekeyed) if (v === old) this.rekeyed.set(k, a.id);
+      this.rekeyed.set(old, a.id);
+      return ch;
+    }
+    return undefined;
+  }
+
+  /** MTC: residents re-keyed since the last call (old id -> new id); empties the list. */
+  takeRekeyed(): Map<string, string> {
+    const out = this.rekeyed;
+    this.rekeyed = new Map();
+    return out;
+  }
+
   /** Reaplica o último snapshot (depuração). */
   reapply(now: number): void {
     if (this.lastSnapshot) this.applySnapshot(this.lastSnapshot, now);
   }
 
   private createRoom(r: RoomInfo, first: boolean, now: number): RoomState {
-    const serverRoom = /server.*network|network.*server/i.test(r.name);
+    // MTC: Makisig's resident room keeps the dark server look.
+    const serverRoom = /server.*network|network.*server/i.test(r.name) || r.id === 'resident:makisig';
     let theme = FALLBACK_THEME;
     try {
       theme = serverRoom ? { ...SERVER_THEME, wall: { ...SERVER_THEME.wall } } : (this.art.roomTheme(r.seed) ?? FALLBACK_THEME);

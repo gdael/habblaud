@@ -9,7 +9,8 @@ import type { ShellStage } from './shell';
 import type { Step } from './steps';
 
 export class Character {
-  readonly id: string;
+  /** MTC: not readonly: a resident is re-keyed when its shown id changes (Sim.rekeyResident). */
+  id: string;
   info: AgentInfo;
   appearance: Appearance;
   readonly rng: () => number;
