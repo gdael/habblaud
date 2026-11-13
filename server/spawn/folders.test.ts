@@ -30,4 +30,9 @@ describe('pastas sugeridas no Novo agente', () => {
     ]);
     expect(recentFolders(sessions, rooms, 1).map((f) => f.path)).toEqual(['/Users/a/loja']);
   });
+
+  it('MTC: the same Windows folder written with a slash or backslash and another case is listed once', () => {
+    const out = recentFolders([{ project: 'C:\\ClaudeCode_v2', lastAt: 100 }], [{ path: 'C:/ClaudeCode_v2', lastAt: 0 }, { path: 'c:/claudecode_v2/', lastAt: 0 }]);
+    expect(out).toEqual([{ path: 'C:\\ClaudeCode_v2', name: 'ClaudeCode_v2', lastAt: 100, sessions: 1 }]);
+  });
 });

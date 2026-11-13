@@ -6,6 +6,7 @@ import type { AccountsService } from '../accounts/service';
 import { handleCodexEvent } from '../codex/http';
 import type { DayStatsService } from '../history/daystats';
 import type { Office } from '../model/office';
+import { isResidentId } from '../model/residents';
 import type { CodexLive } from '../sources/codex/live';
 import type { SessionLookup } from '../sources/source';
 import { isJsonContentType, isLoopbackHost } from './guard';
@@ -243,7 +244,9 @@ export function modSummary(
     }
     return false;
   };
-  const present = snap.agents.filter((a) => isReal(a.id) && a.status !== 'offline' && a.status !== 'done' && !isOwn(a));
+  // MTC: a pod resident is not a real agent id, but while it mirrors a run (not idle) that run counts.
+  const counts = (a: AgentInfo) => isReal(a.id) || (isResidentId(a.id) && a.resident === true && a.status !== 'idle');
+  const present = snap.agents.filter((a) => counts(a) && a.status !== 'offline' && a.status !== 'done' && !isOwn(a));
   const waiting = present
     .filter((a) => a.status === 'waiting')
     .sort((a, b) => a.statusSince - b.statusSince || a.id.localeCompare(b.id))

@@ -7,6 +7,7 @@ import type { ModSummary, OfficeSnapshot, PermissionRequestInfo, UpdateStatus } 
 import { AccountsService } from '../accounts/service';
 import { setQuiet } from '../log';
 import { NameStore } from '../model/names';
+import { parseRoster } from '../model/residents';
 import { Office, type OfficeDeps } from '../model/office';
 import { tempDir } from '../test/fixtures';
 import { createApiHandler, type ApiDeps } from './app';
@@ -393,6 +394,22 @@ describe('GET /api/mod/summary (mod do Claude Code)', () => {
     const s = await summary();
     expect(s.agents).toBe(3);
     expect(s.waiting.every((w) => !w.id.startsWith('demo:'))).toBe(true);
+  });
+
+  it('MTC: a working pod resident counts (and waits); idle residents do not', async () => {
+    await env.close();
+    env.cleanup();
+    const roster = parseRoster({ residents: [{ id: 'talend-qa', name: 'QA', role: 'Tester', look: 'f', type: 'subagent', agentTypes: ['talend-qa'] }, { id: 'makisig', name: 'Makisig', role: 'Net', look: 'm', type: 'subagent' }] });
+    env = await start({}, { permissions: () => perms, roster });
+    const before = await summary();
+    expect(before).toMatchObject({ agents: 1, working: 1 });
+    env.office.addSub({ id: 's1:qa', parentId: '.claude:1', sessionId: 's1', role: 'talend-qa', background: false, startedAt: Date.now() });
+    let s = await summary();
+    expect(s).toMatchObject({ agents: 2, working: 2 });
+    env.office.setStatus('s1:qa', 'waiting', 'aprovar');
+    s = await summary();
+    expect(s.waiting.map((w) => w.id)).toEqual(['resident:talend-qa']);
+    expect(s.waiting[0].name).toBe('QA');
   });
 
   it('só GET/HEAD (405 com Allow)', async () => {

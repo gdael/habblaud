@@ -34,6 +34,12 @@ export function projectFolder(raw: string | undefined): string | undefined {
   return wt ? wt[1] || undefined : p;
 }
 
+/** MTC: folder identity regardless of path separator, and of case for Windows drive paths (same folding as office roomKey). */
+function folderKey(p: string): string {
+  const k = p.replace(/\\/g, '/');
+  return /^[A-Za-z]:/.test(k) ? k.toLowerCase() : k;
+}
+
 /** Junta sessões e salas em pastas únicas, da atividade mais recente para a mais antiga. */
 export function recentFolders(
   sessions: ReadonlyArray<{ project?: string; lastAt: number }>,
@@ -44,11 +50,12 @@ export function recentFolders(
   const add = (raw: string | undefined, lastAt: number, session: boolean) => {
     const path = projectFolder(raw);
     if (!path) return;
-    const cur = byPath.get(path);
+    const key = folderKey(path);
+    const cur = byPath.get(key);
     if (cur) {
       cur.lastAt = Math.max(cur.lastAt, lastAt);
       if (session) cur.sessions++;
-    } else byPath.set(path, { path, name: path.split(/[\\/]/).pop() || path, lastAt, sessions: session ? 1 : 0 });
+    } else byPath.set(key, { path, name: path.split(/[\\/]/).pop() || path, lastAt, sessions: session ? 1 : 0 });
   };
   for (const s of sessions) add(s.project, s.lastAt, true);
   for (const r of rooms) add(r.path, r.lastAt ?? 0, false);
