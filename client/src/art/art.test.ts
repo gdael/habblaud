@@ -12,7 +12,7 @@ import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
 import { MTC_PALETTE, coffeeStation, deviceBench, docStack, draftingBoard, monitorWall, moodboard, reviewBoard, sampleRack, secondMonitor } from './furniture/office';
 import { M } from './furniture/kit';
-import { outlineFor, parseColor, ramp, type Ramp } from './core/color';
+import { outlineFor, parseColor, ramp, shade, type Ramp } from './core/color';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
 import { CHUNK_PX, floorChunk } from './surfaces/floor';
 import { southWallTile, wallFaceTile } from './surfaces/walls';
@@ -499,14 +499,28 @@ describe('móveis', () => {
     expect(countColor(s.buf, '#0A1F54')).toBeGreaterThan(0);
   });
 
+  it('monitor_wall: só cores MTC (lista exata), âmbar presente e só de destaque, em todas as variações', () => {
+    // as mesmas chamadas do sprite: ramp(navy, 0.07) e a tela shade(navy, -0.45)
+    const ramps = [ramp(MTC_PALETTE.navy, 0.07)];
+    const extra = [shade(MTC_PALETTE.navy, -0.45)];
+    for (let seed = 0; seed < 3; seed++) {
+      const s = monitorWall(seed).base;
+      expect(countColor(s.buf, '#FEC00B'), `seed ${seed}`).toBeGreaterThanOrEqual(1);
+      expect(amberShare(s.buf), `seed ${seed}`).toBeLessThanOrEqual(0.06);
+      expect(offPalette(s.buf, ramps, extra), `seed ${seed}`).toEqual([]);
+      expect(offPalette(withOffBrandPixel(s.buf), ramps, extra), `seed ${seed}`).toEqual(['#e2604f']);
+    }
+  });
+
   /**
    * Cores opacas do buffer que não estão no conjunto permitido (lista exata). O conjunto vem das
    * mesmas constantes e chamadas de `ramp()` que o sprite usa, mais o contorno (`outlineFor`) de
    * cada uma dessas cores (o `outline()` do buffer só produz isso).
    */
-  function offPalette(buf: PixelBuf, ramps: readonly Ramp[]): string[] {
+  function offPalette(buf: PixelBuf, ramps: readonly Ramp[], extra: readonly string[] = []): string[] {
     const base = new Set<string>(Object.values(MTC_PALETTE).map((c) => c.toLowerCase()));
     for (const r of ramps) for (const c of Object.values(r)) base.add(c.toLowerCase());
+    for (const c of extra) base.add(c.toLowerCase());
     const allowed = new Set(base);
     for (const c of base) {
       const [r, g, b] = parseColor(c);
@@ -537,6 +551,9 @@ describe('móveis', () => {
     expect(countColor(s.buf, '#0A1F54')).toBeGreaterThan(20);
     expect(countColor(s.buf, '#35A83F') + countColor(s.buf, '#4E8E5C')).toBeGreaterThan(0);
     expect(offPalette(s.buf, DRAFTING_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), DRAFTING_RAMPS())).toEqual(['#e2604f']);
+    expect(countColor(s.buf, '#FEC00B')).toBeGreaterThanOrEqual(1);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
   });
 
   it('moodboard: item de parede do tamanho do footprint, com amostras das cores MTC e só cores MTC', () => {
@@ -550,6 +567,9 @@ describe('móveis', () => {
     expect(s.buf.countOpaque()).toBeGreaterThan(200);
     for (const hex of ['#0A1F54', '#1E2C5D', '#35A83F', '#4E8E5C', '#A9AEC4']) expect(countColor(s.buf, hex), hex).toBeGreaterThan(0);
     expect(offPalette(s.buf, MOODBOARD_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), MOODBOARD_RAMPS())).toEqual(['#e2604f']);
+    expect(countColor(s.buf, '#FEC00B')).toBeGreaterThanOrEqual(1);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
   });
 
   const SECOND_MONITOR_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.deep, 0.07)];

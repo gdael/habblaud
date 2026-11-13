@@ -437,12 +437,12 @@ export function monitorWall(seed: number): BufFurniture {
   const s = floorSheet(3, 1, 30);
   const b = s.buf;
   const r = rngOf(seed, 59);
-  const NAVY = '#0a1f54';
-  const PANEL = '#1e2c5d';
-  const GREEN = '#35a83f';
-  const SOFT = '#4e8e5c';
-  const AMBER = '#fec00b';
-  const WHITE = '#ffffff';
+  const NAVY = MTC_PALETTE.navy;
+  const PANEL = MTC_PALETTE.panel;
+  const GREEN = MTC_PALETTE.green;
+  const SOFT = MTC_PALETTE.soft;
+  const AMBER = MTC_PALETTE.amber;
+  const WHITE = MTC_PALETTE.white;
   const frame = ramp(NAVY, 0.07);
   const screen = shade(NAVY, -0.45);
   // Pés com sapatas (o painel fica de pé no chão, de frente para a câmera).
