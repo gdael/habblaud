@@ -58,6 +58,8 @@ export interface ServerConfig {
   remoteWarning?: string;
   /** Habblaud World (server/world/): conta, personagem e, nas próximas fases, o prédio no mundo. */
   world: WorldConfig;
+  /** JSON do roster de residentes (HABBLAUD_ROSTER; padrão ../habblaud-mtc/roster.json); arquivo ausente = sem residentes. */
+  rosterPath: string;
 }
 
 export interface WorldConfig {
@@ -252,5 +254,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     remote: remote.config,
     remoteWarning: remote.warning,
     world: parseWorldConfig(env, argv),
+    rosterPath: resolve(env.HABBLAUD_ROSTER?.trim() || join(rootDir, '..', 'habblaud-mtc', 'roster.json')),
   };
 }

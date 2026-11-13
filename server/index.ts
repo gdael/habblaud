@@ -20,6 +20,7 @@ import { describeStateMigration, legacyEnvWarning, migrateLegacyStateDir } from 
 import { errMsg, log } from './log';
 import { NameStore } from './model/names';
 import { Office } from './model/office';
+import { loadRoster } from './model/residents';
 import { RoomAliases } from './model/room-aliases';
 import { createPtyRoutes } from './http/pty';
 import { claudeBinFrom, isExecutableFile, loadPty, PtyManager, type ScreenFactory, type SpawnPty } from './pty/manager';
@@ -114,6 +115,7 @@ const accounts = new AccountsService({
   onChange: () => late.office?.markDirty(),
 });
 const office = new Office({
+  roster: loadRoster(config.rosterPath),
   names,
   roomAlias: (path) => roomAliases.get(path),
   version: config.version,
