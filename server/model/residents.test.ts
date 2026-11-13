@@ -61,7 +61,7 @@ describe('residents', () => {
 
 // ---------------------------------------------------------------- overlay no Office
 
-function makeOffice(opts: { roster?: ResidentDef[]; perms?: Map<string, PermissionRequestInfo>; names?: NameStore } = {}) {
+function makeOffice(opts: { roster?: ResidentDef[]; perms?: Map<string, PermissionRequestInfo>; names?: NameStore; reach?: Set<string> } = {}) {
   let clock = 1_000_000;
   const perms = opts.perms;
   const office = new Office({
@@ -74,6 +74,7 @@ function makeOffice(opts: { roster?: ResidentDef[]; perms?: Map<string, Permissi
     now: () => clock,
     ...(opts.roster ? { roster: opts.roster } : {}),
     ...(perms ? { permissions: () => perms } : {}),
+    ...(opts.reach ? { messages: () => opts.reach! } : {}),
   });
   return { office, advance: (ms: number) => (clock += ms), now: () => clock };
 }
@@ -119,32 +120,66 @@ describe('residents: overlay no Office', () => {
     expect(snap.accounts[0].sessions).toBe(0);
   });
 
-  it('Hiraya adopts the real main in C:/ClaudeCode_v2; exactly one Hiraya across close and reopen', () => {
-    const { office, now, advance } = makeOffice({ roster: roster() });
+  it('placeholder Hiraya has the resident id', () => {
+    const { office } = makeOffice({ roster: roster() });
+    const hir = office.commit().snapshot.agents.find((a) => a.name === 'Hiraya')!;
+    expect(hir.id).toBe('resident:hiraya');
+    expect(hir.status).toBe('idle');
+  });
+
+  it('Hiraya adopts the real main (room id exactly C:/ClaudeCode_v2): real id and canMessage kept', () => {
+    const reach = new Set(['acc:1']);
+    const { office, now } = makeOffice({ roster: roster(), reach });
     office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
     office.addActivity('acc:1', act('a1', now()), true);
-    let snap = office.commit().snapshot;
-    let hir = snap.agents.filter((a) => a.name === 'Hiraya');
+    office.addSub(sub('s:x', 'acc:1', 'Explore', now()));
+    const r = office.commit();
+    const snap = r.snapshot;
+    const hir = snap.agents.filter((a) => a.name === 'Hiraya');
     expect(hir).toHaveLength(1);
+    expect(hir[0].id).toBe('acc:1');
     expect(hir[0].resident).toBe(true);
-    expect(hir[0].id).toBe('resident:hiraya');
+    expect(hir[0].canMessage).toBe(true);
     expect(hir[0].activity?.id).toBe('a1');
     expect(hir[0].status).toBe('working');
-    expect(snap.agents.some((a) => a.id === 'acc:1')).toBe(false);
-    expect(snap.agents).toHaveLength(6);
+    expect(hir[0].roomId).toBe(HIRAYA_ROOM);
+    expect(snap.agents.some((a) => a.id === 'resident:hiraya')).toBe(false);
+    // Children of the adopted session keep pointing at its real id.
+    expect(snap.agents.find((a) => a.id === 's:x')!.parentId).toBe('acc:1');
+    expect(snap.agents).toHaveLength(7);
     expect(snap.accounts[0].sessions).toBe(1);
-    expect(snap.rooms.filter((r) => r.id === HIRAYA_ROOM)).toHaveLength(1);
+    expect(snap.rooms).toHaveLength(6);
+    expect(snap.rooms.find((x) => x.id === HIRAYA_ROOM)!.name).toBe('ClaudeCode_v2');
+    // Pinned room: no "new room" notice.
+    expect(r.notices.some((n) => n.text.includes('🏗️'))).toBe(false);
+    // detail(real id) gives the resident view and the real history.
+    const d = office.detail('acc:1')!;
+    expect(d.agent.name).toBe('Hiraya');
+    expect(d.agent.resident).toBe(true);
+    expect(d.history.map((a) => a.id)).toEqual(['a1']);
+    expect(office.roomPath(HIRAYA_ROOM)).toBe('C:/ClaudeCode_v2');
+  });
+
+  it('exactly one Hiraya across close and reopen, backslash and mixed-case cwds', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:\\ClaudeCode_v2', now()));
+    let snap = office.commit().snapshot;
+    expect(snap.agents.filter((a) => a.name === 'Hiraya').map((a) => a.id)).toEqual(['acc:1']);
+    expect(snap.rooms).toHaveLength(6);
 
     office.closeMain('acc:1');
     advance(1_000);
-    office.addMain(main('acc:2', 'c:\\ClaudeCode_v2', now()));
+    office.addMain(main('acc:2', 'c:\\claudecode_V2', now()));
     snap = office.commit().snapshot;
-    hir = snap.agents.filter((a) => a.name === 'Hiraya');
-    expect(hir).toHaveLength(1);
+    const hir = snap.agents.filter((a) => a.name === 'Hiraya');
+    expect(hir.map((a) => a.id)).toEqual(['acc:2']);
     expect(hir[0].status).toBe('working');
+    // the closed adoptee is not shown as a second character
+    expect(snap.agents.some((a) => a.id === 'acc:1')).toBe(false);
     expect(snap.agents).toHaveLength(6);
-    // Windows cwd with backslashes still lands in Hiraya's room, not a second one.
+    // Mixed-case Windows cwd still lands in Hiraya's room, not a second one.
     expect(snap.rooms).toHaveLength(6);
+
     // A second live main in the same cwd stays a normal agent, in Hiraya's room.
     office.addMain(main('acc:3', 'C:\\ClaudeCode_v2', now()));
     snap = office.commit().snapshot;
@@ -154,6 +189,17 @@ describe('residents: overlay no Office', () => {
     expect(other.roomId).toBe(HIRAYA_ROOM);
     expect(snap.rooms).toHaveLength(6);
     expect(snap.accounts[0].sessions).toBe(2);
+    // detail() of a non-resident main stays stock
+    expect(office.detail('acc:3')!.agent.resident).toBeUndefined();
+  });
+
+  it('children of an absorbed pod sub hang off the resident', () => {
+    const { office, now } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', '/p/other', now()));
+    office.addSub(sub('s:dev', 'acc:1', 'talend-developer', now()));
+    office.addSub(sub('s:kid', 's:dev', 'Explore', now()));
+    const snap = office.commit().snapshot;
+    expect(snap.agents.find((a) => a.id === 's:kid')!.parentId).toBe('resident:talend-developer');
   });
 
   it('a talend-developer sub drives the Developer resident; no visitor', () => {

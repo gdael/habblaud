@@ -196,7 +196,11 @@ class NameSet extends Set<string> {
 }
 
 /** MTC: room id compared regardless of path separator (Windows cwds arrive as "C:\x", the roster says "C:/x"). */
-const roomKey = (id: string) => id.replace(/\\/g, '/');
+const roomKey = (id: string) => {
+  const k = id.replace(/\\/g, '/');
+  // Windows paths are case-insensitive: "C:\claudecode_v2" is the same folder as "C:/ClaudeCode_v2".
+  return /^[A-Za-z]:/.test(k) ? k.toLowerCase() : k;
+};
 
 const byStart = (a: ShellJob, b: ShellJob) => a.startedAt - b.startedAt || a.id.localeCompare(b.id);
 
@@ -297,12 +301,26 @@ export class Office {
 
   /** Pasta do projeto da sala (cwd original, sem normalizar). */
   roomPath(roomId: string): string | undefined {
-    return this.rooms.get(roomId)?.path;
+    const own = this.rooms.get(roomId)?.path;
+    if (own !== undefined) return own;
+    // MTC: Hiraya's pinned room: the real cwd room folded into it, else the roster cwd.
+    const folded = this.foldedRooms(roomId)[0];
+    if (folded) return this.rooms.get(folded)?.path;
+    return this.deps.roster?.find((d) => d.type === 'main' && residentRoomId(d) === roomId)?.cwd;
   }
 
   roomName(roomId: string): string {
     const named = this.roomNames.get(roomId);
     if (named !== undefined) return named;
+    // MTC: Hiraya's pinned room takes the name/alias of the real cwd room folded into it, or its own alias.
+    for (const id of this.foldedRooms(roomId)) {
+      const n = this.roomNames.get(id);
+      if (n !== undefined) return n;
+    }
+    if (this.mainResidentRooms().get(roomKey(roomId)) === roomId) {
+      const alias = this.deps.roomAlias?.(roomId);
+      if (alias) return alias;
+    }
     // MTC: a resident's virtual room ("resident:<id>") is named after the resident.
     if (isResidentId(roomId)) {
       const def = this.deps.roster?.find((d) => residentRoomId(d) === roomId);
@@ -312,13 +330,16 @@ export class Office {
   }
 
   detail(id: string): AgentDetail | undefined {
-    if (isResidentId(id) && this.deps.roster?.length) {
-      // Resident: the run it currently shows (its full history), or the idle template with no history.
-      const o = this.applyResidents(this.realAgents(), this.now());
-      const agent = o.agents.find((a) => a.id === id);
-      if (!agent) return undefined;
-      const src = o.sources.get(id);
-      return { agent: cloneAgent(agent), history: (src && this.agents.get(src)?.history.slice()) || [] };
+    if (this.deps.roster?.length && (isResidentId(id) || this.agents.get(id)?.info.kind === 'main')) {
+      // Resident (a pod resident or the adopted Hiraya main): the run it currently shows (its full history), or the
+      // idle template with no history. A main that is not a resident falls through to the stock path.
+      const o = this.applyResidents(this.realAgents());
+      const agent = o.agents.find((a) => a.id === id && a.resident);
+      if (agent) {
+        const src = o.sources.get(id);
+        return { agent: cloneAgent(agent), history: (src && this.agents.get(src)?.history.slice()) || [] };
+      }
+      if (isResidentId(id)) return undefined;
     }
     const rec = this.agents.get(id);
     if (rec) return { agent: cloneAgent(rec.info), history: rec.history.slice() };
@@ -985,55 +1006,76 @@ export class Office {
   }
 
   /**
-   * MTC resident overlay (roster in deps.roster). Each resident is a synthetic `kind: 'main'` agent "resident:<id>"
-   * in its own pinned room, idle by default. A `subagent` resident mirrors the newest active real sub whose role
-   * matches it (all matching subs leave the agent list: no elevator visitor); a `main` resident adopts the
-   * earliest-started live real main in its cwd room. `sources` maps resident id -> real agent shown.
+   * MTC resident overlay (roster in deps.roster). Each `subagent` resident is a synthetic `kind: 'main'` agent
+   * "resident:<id>" in its own pinned room, idle by default; it mirrors the newest active real sub whose role matches
+   * it (all matching subs leave the agent list: no elevator visitor; their children hang off the resident). A `main`
+   * resident adopts the earliest-started live real main in its cwd room: that agent KEEPS its real id (messages,
+   * terminal and editor still resolve) and only gets the resident's name/look/role/seed; with none, an idle
+   * placeholder "resident:<id>" stands in. `sources` maps the shown agent id -> real agent id; `adopted` lists the
+   * real mains adopted now (only build() records them).
    */
-  private applyResidents(
-    real: AgentInfo[],
-    now: number,
-  ): { agents: AgentInfo[]; rooms: Map<string, { path: string; createdAt: number }>; sources: Map<string, string> } {
-    void now;
+  private applyResidents(real: AgentInfo[]): {
+    agents: AgentInfo[];
+    rooms: Map<string, { path: string; createdAt: number }>;
+    sources: Map<string, string>;
+    adopted: string[];
+  } {
     const roster = this.deps.roster ?? [];
     const rooms = new Map<string, { path: string; createdAt: number }>();
     const sources = new Map<string, string>();
-    if (!roster.length) return { agents: real, rooms, sources };
+    const adopted: string[] = [];
+    if (!roster.length) return { agents: real, rooms, sources, adopted };
     const since = this.deps.startedAt;
     const account = real.find((a) => a.kind === 'main')?.account ?? '';
     const live = (a: AgentInfo) => a.status !== 'offline' && a.status !== 'done';
-    /** Real agent id -> resident that absorbs it (it leaves the agent list). */
-    const drop = new Map<string, string>();
+    // Resident each real sub belongs to (matched once per agent).
+    const subOf = new Map<string, string>();
+    for (const a of real) {
+      if (a.kind !== 'sub') continue;
+      const def = matchResident(roster, a.role);
+      if (def?.type === 'subagent') subOf.set(a.id, def.id);
+    }
+    /** Absorbed pod subs: real id -> resident id (they leave the list; their children are re-parented). */
+    const absorbed = new Map<string, string>();
+    /** Real mains shown as (or folded into) a main resident: they leave the list as themselves, no re-parenting. */
+    const hidden = new Set<string>();
     const residents: AgentInfo[] = [];
     for (const def of roster) {
       const id = residentAgentId(def);
       const roomId = residentRoomId(def);
       rooms.set(roomId, { path: roomId, createdAt: since });
       const seed = hash32(id);
-      let src: AgentInfo | undefined;
+      let view: AgentInfo | undefined;
       if (def.type === 'subagent') {
-        const runs = real.filter((a) => a.kind === 'sub' && matchResident(roster, a.role)?.id === def.id);
-        for (const a of runs) drop.set(a.id, id);
-        for (const a of runs) if (live(a) && (!src || a.lastEventAt > src.lastEventAt)) src = a;
+        let src: AgentInfo | undefined;
+        for (const a of real) {
+          if (subOf.get(a.id) !== def.id) continue;
+          absorbed.set(a.id, id);
+          if (live(a) && (!src || a.lastEventAt > src.lastEventAt)) src = a;
+        }
+        if (src) {
+          // `real` already holds copies: a spread is enough.
+          view = { ...src, id, kind: 'main', roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
+          delete view.parentId;
+          delete view.parts;
+          delete view.custom;
+          delete view.canMessage;
+          sources.set(id, src.id);
+        }
       } else {
         const key = roomKey(roomId);
         const mains = real.filter((a) => a.kind === 'main' && roomKey(a.roomId) === key);
-        src = mains.filter(live).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))[0];
-        if (src) this.adoptedMains.add(src.id);
-        // The adopted session and earlier adoptees on their way out are this resident: no second character.
-        for (const a of mains) if (a === src || (!live(a) && this.adoptedMains.has(a.id))) drop.set(a.id, id);
+        const src = mains.filter(live).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))[0];
+        // Earlier adoptees on their way out are this resident too: no second character.
+        for (const a of mains) if (a === src || (!live(a) && this.adoptedMains.has(a.id))) hidden.add(a.id);
+        if (src) {
+          view = { ...src, roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
+          sources.set(src.id, src.id);
+          adopted.push(src.id);
+        }
       }
-      let view: AgentInfo;
-      if (src) {
-        view = { ...cloneAgent(src), id, kind: 'main', roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
-        delete view.parentId;
-        delete view.parts;
-        delete view.custom;
-        // Messages and terminal are keyed by the real agent id, which a resident id does not resolve to.
-        delete view.canMessage;
-        sources.set(id, src.id);
-      } else {
-        view = {
+      residents.push(
+        view ?? {
           id,
           kind: 'main',
           roomId,
@@ -1051,17 +1093,15 @@ export class Office {
           stats: zeroStats(),
           seed,
           resident: true,
-        };
-      }
-      residents.push(view);
+        },
+      );
     }
-    // Children of an absorbed agent hang off the resident that absorbed it.
-    // Agents in a main resident's cwd written with the other separator ("C:\\x" vs "C:/x") live in its room.
-    const mainRooms = new Map(roster.filter((d) => d.type === 'main').map((d) => [roomKey(residentRoomId(d)), residentRoomId(d)]));
+    // Agents in a main resident's cwd written another way ("C:\\x", "c:/X" vs "C:/x") live in its room.
+    const mainRooms = this.mainResidentRooms();
     const rest = real
-      .filter((a) => !drop.has(a.id))
+      .filter((a) => !absorbed.has(a.id) && !hidden.has(a.id))
       .map((a) => {
-        const parentId = a.parentId && drop.get(a.parentId);
+        const parentId = a.parentId && absorbed.get(a.parentId);
         const roomId = mainRooms.get(roomKey(a.roomId));
         if (!parentId && (!roomId || roomId === a.roomId)) return a;
         const c = { ...a };
@@ -1069,7 +1109,21 @@ export class Office {
         if (roomId) c.roomId = roomId;
         return c;
       });
-    return { agents: [...residents, ...rest], rooms, sources };
+    return { agents: [...residents, ...rest], rooms, sources, adopted };
+  }
+
+  /** MTC: roomKey -> pinned room id of each `main` resident. */
+  private mainResidentRooms(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const d of this.deps.roster ?? []) if (d.type === 'main') out.set(roomKey(residentRoomId(d)), residentRoomId(d));
+    return out;
+  }
+
+  /** MTC: real room ids folded into the pinned main-resident room `roomId` (same roomKey); empty for other rooms. */
+  private foldedRooms(roomId: string): string[] {
+    const key = roomKey(roomId);
+    if (this.mainResidentRooms().get(key) !== roomId) return [];
+    return [...this.rooms.keys()].filter((id) => id !== roomId && roomKey(id) === key);
   }
 
   private build(): OfficeSnapshot {
@@ -1081,7 +1135,8 @@ export class Office {
     // o simulador; com o recurso desligado, ninguém recebe.
     for (const a of real) if (reach?.has(a.id) && a.kind === 'main' && a.status !== 'offline' && a.status !== 'done') a.canMessage = true;
     // MTC: residents overlaid on the real agents; `real` (without residents) still drives the session counts below.
-    const overlay = this.applyResidents(real, now);
+    const overlay = this.applyResidents(real);
+    for (const id of overlay.adopted) this.adoptedMains.add(id);
     // Resident rooms first: they take slots 0..n-1 and stay pinned (they are in every build, never pruned).
     const entries = new Map(overlay.rooms);
     const pinned = new Set([...overlay.rooms.keys()].map(roomKey));
@@ -1100,7 +1155,10 @@ export class Office {
       .sort((a, b) => a.slot - b.slot);
     // festa/alarme (eventos do GitHub): das salas reais ou do demo
     for (const room of rooms) {
-      const effect = this.effects.get(room.id, now) ?? this.demoSnap?.rooms.find((r) => r.id === room.id)?.effect;
+      // MTC: Hiraya's pinned room also shows effects recorded under the real cwd room ids folded into it.
+      let effect = this.effects.get(room.id, now);
+      for (const id of this.foldedRooms(room.id)) effect ??= this.effects.get(id, now);
+      effect ??= this.demoSnap?.rooms.find((r) => r.id === room.id)?.effect;
       if (effect) room.effect = { ...effect };
     }
     const demoAgents = (this.demoSnap?.agents ?? []).map((a) => {
@@ -1170,6 +1228,8 @@ export class Office {
     if (this.rooms.has(roomId)) return;
     this.rooms.set(roomId, { path: roomId, createdAt: now });
     this.recomputeRoomNames();
+    // MTC: Hiraya's room is pinned and always there: no "new room" notice for it.
+    if (this.mainResidentRooms().has(roomKey(roomId))) return;
     this.notice('room', roomId, 'info', tr('🏗️ Nova sala: {0}', [this.roomName(roomId)]), roomId);
   }
 
