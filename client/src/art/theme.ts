@@ -15,6 +15,11 @@ const THEMES: readonly RoomTheme[] = [
   { carpet: '#d1c5b8', carpet2: '#c5b8aa', wall: { base: '#f4efe8', trim: '#8a6a52', pattern: 'wood_panel' }, accent: '#c9713f', deskVariant: 'dark', chairVariant: 'gray' },
 ];
 
+/** Tema fixo da sala Servidor/Rede (carpete e parede escuros, destaque ciano). */
+export const SERVER_THEME: RoomTheme = {
+  carpet: '#3a4252', carpet2: '#323a49', wall: { base: '#2c3340', trim: '#4fc3c8', pattern: 'plain' }, accent: '#36d1d8', deskVariant: 'dark', chairVariant: 'black',
+};
+
 export const THEME_COUNT = THEMES.length;
 
 export function roomTheme(seed: number): RoomTheme {

@@ -20,6 +20,8 @@ export interface RoomInput {
   id: string;
   slot: number;
   seed: number;
+  /** Sala Servidor/Rede: racks no lugar das estantes e das pastas. */
+  serverRoom?: boolean;
 }
 
 const PLANTS_TALL = ['palm', 'ficus', 'monstera', 'bonsai'] as const;
@@ -187,8 +189,13 @@ export function layoutProjectRoom(room: RoomInput, theme: RoomTheme): AreaLayout
   furn('plant_tall', 14, 2, tall, { order: 0.2 });
   if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
   else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
-  const column = Math.floor(rng() * 3);
-  if (column === 0) {
+  const column = room.serverRoom ? -1 : Math.floor(rng() * 3);
+  if (room.serverRoom) {
+    furn('server_rack', 14, 4, undefined, { order: 0.3 });
+    furn('server_rack', 14, 5, undefined, { order: 0.31 });
+    furn('server_rack', 14, 6, undefined, { order: 0.32 });
+    furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
+  } else if (column === 0) {
     furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
     furn('printer', 14, 6, undefined, { order: 0.32 });
     furn('floor_lamp', 14, 8, undefined, { order: 0.34 });

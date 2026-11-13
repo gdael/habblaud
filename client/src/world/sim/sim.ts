@@ -3,6 +3,7 @@
 import { partsKey } from '../../../../shared/appearance';
 import type { AgentInfo, OfficeSnapshot, Provider, RoomInfo } from '../../../../shared/types';
 import type { ArtModule, Dir, RoomTheme } from '../../art/api';
+import { SERVER_THEME } from '../../art/theme';
 import type { WorldOptions } from '../api';
 import { COL_W, COMPACT_DELAY_MS, DISMANTLE_DELAY_MS, FOOT_DX, FOOT_DY, MISSING_DEBOUNCE_MS, RUN_SPEED, TILE, WALK_SPEED } from '../constants';
 import { assembleBuilding, type BuildingLayout } from '../layout/building';
@@ -251,15 +252,16 @@ export class Sim {
   }
 
   private createRoom(r: RoomInfo, first: boolean, now: number): RoomState {
+    const serverRoom = /server.*network|network.*server/i.test(r.name);
     let theme = FALLBACK_THEME;
     try {
-      theme = this.art.roomTheme(r.seed) ?? FALLBACK_THEME;
+      theme = serverRoom ? { ...SERVER_THEME, wall: { ...SERVER_THEME.wall } } : (this.art.roomTheme(r.seed) ?? FALLBACK_THEME);
     } catch {
       theme = FALLBACK_THEME;
     }
     // a primeira vaga livre do prédio (o slot do servidor só dá a ordem de chegada)
     const slot = this.freeSlot();
-    const layout = layoutProjectRoom({ id: r.id, slot, seed: r.seed }, theme);
+    const layout = layoutProjectRoom({ id: r.id, slot, seed: r.seed, serverRoom }, theme);
     const rs = new RoomState(r, theme, layout, first ? 'ready' : 'building', now, first, slot);
     this.rooms.set(r.id, rs);
     return rs;

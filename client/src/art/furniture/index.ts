@@ -55,6 +55,8 @@ function build(kind: FurnitureKind, variant: string | undefined, state: number, 
       return O.plantTall(variant, seed);
     case 'glass_partition':
       return O.glassPartition(variant);
+    case 'server_rack':
+      return O.serverRack(seed);
     case 'binder_shelf':
       return O.binderShelf(seed);
     case 'meeting_table':

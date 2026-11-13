@@ -150,6 +150,7 @@ export type FurnitureKind =
   | 'plant_small' // 1x1 vaso pequeno. variants: 'fern' | 'succulent' | 'flower'
   | 'plant_tall' // 1x1 planta alta (até ~2 tiles de altura). variants: 'palm' | 'ficus' | 'monstera' | 'bonsai'
   | 'glass_partition' // 1x1 segmento de divisória de vidro sobre base branca (meia-parede + vidro azulado com reflexo). variants: 'h' (corre leste-oeste) | 'v' (corre norte-sul) | 'end' (ponta/coluna)
+  | 'server_rack' // 1x1 rack de servidor alto e escuro com LEDs (sala Servidor/Rede).
   | 'binder_shelf' // 1x1 estante alta e estreita com pastas coloridas (azul/laranja/verde) e caixas.
   | 'meeting_table' // 3x2 mesa de reunião/bancada para subagentes.
   | 'stool' // 1x1 assento simples (banqueta). Personagem pode sentar em qualquer direção.
@@ -228,6 +229,7 @@ export const FURNITURE: Readonly<Record<FurnitureKind, FurnitureDef>> = {
   plant_small: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, variants: ['fern', 'succulent', 'flower'] },
   plant_tall: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, variants: ['palm', 'ficus', 'monstera', 'bonsai'] },
   glass_partition: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, variants: ['h', 'v', 'end'] },
+  server_rack: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   binder_shelf: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   meeting_table: { mount: 'floor', footprint: { w: 3, h: 2 }, blocks: true },
   stool: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: false, seat: true },

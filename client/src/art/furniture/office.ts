@@ -400,6 +400,33 @@ export function binderShelf(seed: number): BufFurniture {
   return { base: s };
 }
 
+export function serverRack(seed: number): BufFurniture {
+  const s = floorSheet(1, 1, 22);
+  const b = s.buf;
+  const r = rngOf(seed, 41);
+  const w = ramp('#2b303b', 0.06);
+  topFace(b, 0, -21, 16, 3, w);
+  b.rect(0, -18, 16, 34, w.dk);
+  b.rect(1, -17, 14, 31, '#171a21');
+  b.vline(0, -18, 15, w.lt);
+  b.vline(15, -18, 15, w.dd);
+  // Cinco unidades 1U/2U com vento, LED de atividade e LED de link.
+  const units = [-17, -11, -5, 1, 7];
+  const leds = ['#5fd07a', '#5fd07a', '#5fd07a', '#f2c14e', '#7fd0ff'];
+  units.forEach((top, i) => {
+    b.rect(2, top, 12, 5, '#262b36');
+    b.hline(2, 13, top, '#3a4150');
+    b.hline(2, 13, top + 4, '#0e1015');
+    for (let x = 3; x < 9; x += 2) b.vline(x, top + 1, top + 3, '#10131a');
+    b.set(11, top + 1, r() < 0.2 ? '#e05a5a' : leds[i % leds.length]);
+    b.set(12, top + 1, r() < 0.5 ? '#7fd0ff' : '#3a4150');
+    b.set(11, top + 3, '#5fd07a');
+  });
+  b.outline();
+  contact(b, 0, 13, 16, 4, 0.22);
+  return { base: s };
+}
+
 export function filingCabinet(): BufFurniture {
   const s = floorSheet(1, 1, 8);
   const b = s.buf;
