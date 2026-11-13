@@ -1,6 +1,6 @@
 /* Interface do Habblaud: painéis escuros translúcidos sobre o escritório em pixel art.
-   Tipografia: logotipo em pixels (SVG); Pixelify Sans só em rótulos fixos de painel sem "C" maiúsculo nem
-   dígitos (na Pixelify o "C" parece "O" e o "5" parece "S"); system-ui para o corpo, nomes, letras de conta e números.
+   Tipografia: só Inter (família única, também para rótulos e números); se a Inter não estiver instalada, cai para
+   system-ui. Não há mais Pixelify Sans.
    Identidade: detalhes "em pixel" (pontos de status quadrados, barras segmentadas de uso, ícones em pixels). */
 
 .ui-root {
@@ -15,7 +15,7 @@
   --ui-line-strong: rgba(169, 174, 196, 0.26);
   --ui-text: #ffffff;
   --ui-muted: #a9aec4;
-  /* Mist 80% + Slate 20%: 5,8:1 sobre o painel e 4,85:1 sobre linhas em destaque: AA para texto pequeno. */
+  /* Mist 80% + Slate 20%: cerca de 5,8:1 sobre o painel, mas só cerca de 4,1:1 sobre o preenchimento de linha em destaque (--ui-line-strong): abaixo de AA (4,5:1) nesse caso. */
   --ui-faint: #999fb4;
   --ui-accent: #68be6f;
   --ui-accent-soft: rgba(53, 168, 63, 0.16);

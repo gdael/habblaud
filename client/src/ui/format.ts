@@ -247,6 +247,15 @@ export function permissionLabel(mode: string | undefined): string {
   return PERMISSION_LABELS[mode] ?? mode;
 }
 
+/**
+ * Subtitle (and tooltip) path of a room: virtual resident rooms ("resident:<id>") have no folder, so their internal
+ * id must not leak into the UI; they show nothing.
+ */
+export function roomPathLabel(room: { id: string; path: string }): string {
+  if (room.id.startsWith('resident:') || room.path.startsWith('resident:')) return '';
+  return shortPath(room.path);
+}
+
 /** Encurta caminhos da pasta pessoal: "/Users/ana/projetos/x" -> "~/projetos/x". */
 export function shortPath(path: string): string {
   return path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~').replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/, '~');

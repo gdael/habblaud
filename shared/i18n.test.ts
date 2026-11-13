@@ -46,13 +46,14 @@ describe('i18n', () => {
   it('servidor: HABBLAUD_LANG vale para qualquer idioma; do sistema, o inglês não conta', () => {
     expect(serverLocale({ HABBLAUD_LANG: 'en' }, 'pt-BR')).toBe('en');
     expect(serverLocale({ HABBLAUD_LANG: 'es-MX', LANG: 'fr_FR.UTF-8' })).toBe('es');
-    // Mac com LANG em inglês e o container sem LANG (Intl en-US): o escritório fica em português.
+    // LANG em inglês e o container sem LANG (Intl en-US): sem configuração, o padrão é o inglês.
     expect(serverLocale({ LANG: 'en_US.UTF-8' }, 'en-US')).toBe('en');
     expect(serverLocale({}, 'en-US')).toBe('en');
     expect(serverLocale({}, undefined)).toBe('en');
     expect(serverLocale({ HABBLAUD_LANG: 'pt' }, undefined)).toBe('pt-BR');
     expect(serverLocale({ LANG: 'pt_BR.UTF-8' }, undefined)).toBe('pt-BR');
-    expect(normalizeLocale('pt-BR')).toBe('pt-BR');
+    expect(normalizeLocale('xx')).toBeUndefined();
+    expect(serverLocale({ LANG: 'xx_XX' }, undefined)).toBe('en');
     expect(serverLocale({ LANG: 'en_US.UTF-8' }, 'pt-BR')).toBe('pt-BR');
     expect(serverLocale({ LANG: 'fr_FR.UTF-8' })).toBe('fr');
     expect(serverLocale({ LC_ALL: 'es_ES.UTF-8', LANG: 'en_US.UTF-8' })).toBe('es');

@@ -3,6 +3,7 @@ import type { AgentInfo, RoomInfo } from '../../../shared/types';
 import { isResidentId } from '../../../shared/timeline';
 import { composerMode } from './composer-model';
 import { canEditCharacter } from './character-model';
+import { roomPathLabel } from './format';
 import { computeCounters, idleForMs, isTabPeer, roleBadgeText } from './model';
 import { ptyControllable } from './ptyapi';
 
@@ -60,7 +61,7 @@ describe('residents', () => {
   it('idle residents show idle time and a resting status', () => {
     expect(idleForMs(res('dev', 'mtc', { statusSince: 1000 }), 61_000)).toBe(60_000);
     expect(idleForMs(res('dev', 'mtc', { status: 'working', statusSince: 1000 }), 61_000)).toBe(0);
-    expect(idleForMs(res('dev', 'mtc', { statusSince: 1000 }), 61_000)).toBeGreaterThanOrEqual(60_000);
+    expect(idleForMs(res('dev', 'mtc', { status: 'waiting', statusSince: 1000 }), 61_000)).toBe(0);
   });
 
   it('badge falls back to stock label when a resident role is empty', () => {
@@ -70,5 +71,16 @@ describe('residents', () => {
   it('terminal tabs skip resident: agents, keep adopted Hiraya', () => {
     const peers = [res('dev', 'mtc'), res('qa', 'mtc'), agent({ id: '.claude:42', roomId: 'mtc', resident: true, role: 'Lead' })];
     expect(peers.filter((a) => isTabPeer(a, 'mtc')).map((a) => a.id)).toEqual(['.claude:42']);
+  });
+});
+
+describe('roomPathLabel', () => {
+  it('hides the internal id of resident rooms', () => {
+    expect(roomPathLabel({ id: 'resident:talend-designer', path: 'resident:talend-designer' })).toBe('');
+    expect(roomPathLabel({ id: 'x', path: 'resident:y' })).toBe('');
+  });
+  it('shows the short path for real rooms', () => {
+    expect(roomPathLabel({ id: '/Users/ana/x', path: '/Users/ana/x' })).toBe('~/x');
+    expect(roomPathLabel({ id: 'c:/p', path: 'C:/p' })).toBe('C:/p');
   });
 });
