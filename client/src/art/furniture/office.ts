@@ -900,6 +900,138 @@ export function docStack(): BufFurniture {
   return { base: s };
 }
 
+/**
+ * Bancada de aparelhos (2x1, laboratório de testes do QA, MTC): bancada de laboratório com tampo
+ * claro em Mist sobre uma estrutura aberta navy (pés finos, travessa e uma prateleira baixa com
+ * caixas Mist; o vão embaixo deixa ver o piso, para não ser confundida com uma mesa ou um armário).
+ * Em cima, aparelhos escuros (navy profundo) com brilhos de tela verde e branco: um celular em pé
+ * num suporte, um tablet apoiado e um notebook pequeno aberto; na frente, uma régua de carga navy
+ * com LEDs verdes (um âmbar, de destaque) e cabos brancos subindo até os aparelhos.
+ */
+export function deviceBench(): BufFurniture {
+  const s = floorSheet(2, 1, 22);
+  const b = s.buf;
+  const top = ramp(MTC_MIST, 0.06);
+  const frame = ramp(MTC_PANEL, 0.07);
+  const dev = ramp(MTC_DEEP, 0.07);
+  // Estrutura aberta: pés finos, travessa da frente e prateleira baixa com duas caixas Mist.
+  for (const x of [1, 29]) {
+    b.rect(x, 0, 2, 15, frame.base);
+    b.vline(x, 0, 14, frame.lt);
+    b.vline(x + 1, 0, 14, frame.dk);
+  }
+  b.rect(3, 9, 26, 2, frame.base);
+  b.hline(3, 28, 9, frame.lt);
+  b.hline(3, 28, 10, frame.dd);
+  for (const [bx, bw] of [[5, 7], [14, 6]] as const) {
+    b.rect(bx, 4, bw, 5, top.base);
+    b.hline(bx, bx + bw - 1, 4, top.lt);
+    b.vline(bx + bw - 1, 5, 8, top.dk);
+    b.hline(bx + 2, bx + bw - 3, 6, MTC_WHITE);
+  }
+  // Avental navy sob o tampo e tampo Mist claro com a espessura da borda.
+  b.rect(0, -3, 32, 3, frame.base);
+  b.hline(0, 31, -1, frame.dd);
+  topFace(b, 0, -11, 32, 8, top);
+  b.hline(0, 31, -4, top.dk);
+  // Celular em pé num suporte (esquerda): suporte Mist escuro, aparelho navy profundo.
+  b.rect(3, -6, 6, 2, top.dk);
+  b.vline(7, -9, -6, top.dd);
+  b.rect(4, -17, 5, 10, dev.base);
+  b.hline(4, 8, -17, dev.lt);
+  b.rect(5, -16, 3, 7, dev.dd);
+  b.set(5, -15, MTC_WHITE);
+  b.hline(5, 7, -12, MTC_GREEN);
+  b.set(6, -10, MTC_GREEN);
+  // Tablet apoiado (centro): moldura navy profunda, tela escura com reflexo branco e uma barra verde.
+  b.rect(11, -18, 11, 9, dev.base);
+  b.hline(11, 21, -18, dev.lt);
+  b.vline(21, -17, -10, dev.dk);
+  b.rect(12, -17, 9, 7, dev.dd);
+  b.set(13, -16, MTC_WHITE);
+  b.set(14, -15, MTC_WHITE);
+  b.hline(13, 18, -12, MTC_GREEN);
+  b.hline(13, 16, -14, MTC_SOFT);
+  b.hline(11, 21, -9, dev.dk);
+  // Notebook pequeno aberto (direita): tela com código verde e base navy com teclado Mist.
+  b.rect(23, -17, 8, 7, dev.base);
+  b.hline(23, 30, -17, dev.lt);
+  b.rect(24, -16, 6, 5, dev.dd);
+  b.hline(25, 28, -15, MTC_GREEN);
+  b.hline(25, 27, -13, MTC_SOFT);
+  b.set(28, -13, MTC_WHITE);
+  b.rect(22, -10, 10, 3, frame.base);
+  b.hline(22, 31, -10, frame.lt);
+  b.hline(23, 30, -9, top.base);
+  // Régua de carga navy na frente do tampo: LEDs verdes, um âmbar, e cabos brancos aos aparelhos.
+  b.rect(10, -6, 11, 2, frame.dk);
+  b.hline(10, 20, -6, frame.base);
+  for (const lx of [12, 15, 18]) b.set(lx, -5, MTC_GREEN);
+  b.set(20, -5, MTC_AMBER);
+  b.vline(9, -8, -6, MTC_WHITE);
+  b.vline(16, -8, -7, MTC_WHITE);
+  b.hline(21, 23, -7, MTC_WHITE);
+  b.outline();
+  contact(b, 0, 13, 32, 4, 0.2);
+  return { base: s };
+}
+
+/**
+ * Rack de amostras (1x1, laboratório de testes do QA, MTC): estante baixa navy de três prateleiras,
+ * fundo navy profundo, com bandejas e caixas etiquetadas: caixa verde com etiqueta branca, caixa
+ * branca com etiqueta navy, bandeja Mist com amostras, caixa navy com etiqueta branca (e um ponto
+ * âmbar de destaque), caixa branca com etiqueta verde e bandeja verde suave.
+ */
+export function sampleRack(): BufFurniture {
+  const s = floorSheet(1, 1, 20);
+  const b = s.buf;
+  const frame = ramp(MTC_PANEL, 0.07);
+  const tray = ramp(MTC_MIST, 0.06);
+  const box = ramp(MTC_GREEN, 0.08);
+  // Fundo, montantes e prateleiras.
+  b.rect(2, -17, 12, 31, MTC_DEEP);
+  for (const x of [1, 13]) {
+    b.rect(x, -18, 2, 33, frame.base);
+    b.vline(x, -18, 14, frame.lt);
+  }
+  b.vline(14, -18, 14, frame.dk);
+  b.hline(1, 14, -19, frame.hi);
+  b.hline(1, 14, -18, frame.lt);
+  for (const y of [-9, 0, 9]) {
+    b.hline(1, 14, y, frame.lt);
+    b.hline(1, 14, y + 1, frame.dk);
+  }
+  b.hline(1, 14, 14, frame.dd);
+  /** Caixa com tampa clara e etiqueta. */
+  const crate = (x: number, y: number, w: number, h: number, body: string, lid: string, label: string) => {
+    b.rect(x, y, w, h, body);
+    b.hline(x, x + w - 1, y, lid);
+    b.rect(x + 1, y + 2, Math.max(2, w - 3), 2, label);
+  };
+  // Prateleira de cima: caixa verde (etiqueta branca) e caixa branca (etiqueta navy).
+  crate(3, -16, 5, 7, box.base, box.lt, MTC_WHITE);
+  crate(8, -15, 5, 6, MTC_WHITE, tray.hi, MTC_NAVY);
+  // Prateleira do meio: bandeja Mist com amostras e caixa navy com etiqueta branca e ponto âmbar.
+  b.rect(3, -3, 5, 3, tray.base);
+  b.hline(3, 7, -3, tray.lt);
+  b.set(4, -4, MTC_GREEN);
+  b.set(6, -4, MTC_WHITE);
+  b.set(5, -4, MTC_SOFT);
+  crate(8, -7, 5, 7, MTC_NAVY, frame.lt, MTC_WHITE);
+  b.set(11, -3, MTC_AMBER);
+  // Prateleira de baixo: caixa branca com etiqueta verde e bandeja verde suave.
+  crate(3, 2, 6, 7, MTC_WHITE, tray.hi, MTC_GREEN);
+  b.rect(9, 5, 4, 4, MTC_SOFT);
+  b.hline(9, 12, 5, box.lt);
+  b.set(10, 7, MTC_WHITE);
+  // Gaveta embaixo com puxador Mist.
+  b.rect(3, 11, 10, 3, frame.base);
+  b.hline(6, 9, 12, tray.base);
+  b.outline();
+  contact(b, 0, 13, 16, 4, 0.2);
+  return { base: s };
+}
+
 export function filingCabinet(): BufFurniture {
   const s = floorSheet(1, 1, 8);
   const b = s.buf;

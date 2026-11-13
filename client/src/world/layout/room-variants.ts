@@ -74,6 +74,9 @@ export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
     case 'review':
       placeReviewInterior(c);
       return true;
+    case 'testlab':
+      placeTestlabInterior(c);
+      return true;
     default:
       return false;
   }
@@ -474,4 +477,63 @@ function placeReviewInterior(c: InteriorCtx): void {
   spot('stand', 9, 3, 'left');
   spot('stand', 1, 8, 'right');
   spot('stand', 11, 5, 'up', { dy: -2 });
+}
+
+/**
+ * Laboratório de testes (QA): a mesa do QA (rank 0) e uma segunda mesa (rank 1) de costas para a
+ * câmera; atrás delas, uma bancada de aparelhos (celular, tablet, notebook) com um rack de
+ * amostras ao lado; no lado leste, sobre um tapete na cor do tema, outra bancada de aparelhos
+ * (quem testa fica em pé ao sul, virado para ela), um rack de amostras e uma mesinha com duas
+ * banquetas; mais racks de amostras na coluna leste e embaixo. O quadro de checklist é o quadro
+ * branco da casca da sala.
+ */
+function placeTestlabInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, rug, pick, theme, seed } = c;
+
+  // ---- mesas: a do QA (rank 0) e uma segunda (rank 1), de costas para a câmera; o tapete do
+  // tema sob as mesas é o da casca da sala
+  for (let i = 0; i < 2; i++) {
+    const lx = 2 + i * 2;
+    const desk = furn('desk', lx, 6, theme.deskVariant, { order: 0.4 + i * 0.05, seat: `S${i}` });
+    seat('desk', 'office_chair', lx, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: i, side: 'S', order: 0.6 + i * 0.03 });
+  }
+  furn('trash_bin', 6, 6, undefined, { order: 0.42 });
+  furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.41 });
+
+  // ---- bancada de aparelhos atrás das mesas (linha 4; a linha 3 fica livre para circular) com
+  // um rack de amostras ao lado; quem testa fica em pé ao sul, virado para a bancada
+  furn('device_bench', 2, 4, undefined, { order: 0.3 });
+  furn('sample_rack', 4, 4, undefined, { order: 0.31 });
+  spot('stand', 2, 5, 'up', { dx: TILE / 2, dy: -2 });
+
+  // ---- lado leste: segunda bancada e um rack de amostras sobre um tapete do tema, e a mesinha
+  // com duas banquetas para conversar sobre os testes
+  rug(9.6, 3.6, 4.8, 4.8, shade(theme.carpet2, 0.25), seed + 6);
+  furn('device_bench', 10, 4, undefined, { order: 0.32 });
+  furn('sample_rack', 12, 4, undefined, { order: 0.33 });
+  spot('stand', 10, 5, 'up', { dy: -2 });
+  spot('stand', 11, 5, 'up', { dy: -2 });
+  furn('cafe_table', 11, 7, undefined, { order: 0.45 });
+  seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.65 });
+  seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.66 });
+
+  // ---- apoio na parede norte (sem cobrir quadro, placa ou janela) e a coluna leste
+  placeNorthSupport(c);
+  furn('sample_rack', 14, 4, undefined, { order: 0.3 });
+  furn('floor_lamp', 14, 6, undefined, { order: 0.33 });
+  furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre)
+  furn('plant_tall', 1, 10, pick(PLANTS_TALL), { order: 0.2 });
+  furn('sample_rack', 2, 10, undefined, { order: 0.21 });
+  furn('binder_shelf', 3, 10, undefined, { order: 0.22 });
+  furn('filing_cabinet', 4, 10, undefined, { order: 0.23 });
+  furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
+  furn('sample_rack', 12, 10, undefined, { order: 0.26 });
+  furn('trash_bin', 13, 10, undefined, { order: 0.27 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.28 });
+
+  // pontos em pé para quem visita
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 8, 'right');
 }

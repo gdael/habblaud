@@ -156,6 +156,8 @@ export type FurnitureKind =
   | 'second_monitor' // 1x1 gaveteiro navy com um segundo monitor em pé (retrato), tela escura com código verde; decorativo ao lado da mesa (a tela viva é só a da 'desk'), dev bay do Developer (MTC).
   | 'coffee_station' // 2x1 bancada navy com tampo de madeira, máquina de espresso, canecas e uma plantinha, dev bay do Developer (MTC).
   | 'doc_stack' // 1x1 carrinho navy com uma pilha de papel branco e uma pilha de pastas verdes/navy, sala do Reviewer (MTC).
+  | 'device_bench' // 2x1 bancada de laboratório com tampo Mist: celular num suporte, tablet, notebook pequeno e régua de carga com cabos; aparelhos escuros com brilhos verde/branco, laboratório de testes do QA (MTC).
+  | 'sample_rack' // 1x1 rack baixo navy com bandejas e caixas etiquetadas (verde, branco, Mist, navy), laboratório de testes do QA (MTC).
   | 'binder_shelf' // 1x1 estante alta e estreita com pastas coloridas (azul/laranja/verde) e caixas.
   | 'meeting_table' // 3x2 mesa de reunião/bancada para subagentes.
   | 'stool' // 1x1 assento simples (banqueta). Personagem pode sentar em qualquer direção.
@@ -242,6 +244,8 @@ export const FURNITURE: Readonly<Record<FurnitureKind, FurnitureDef>> = {
   second_monitor: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   coffee_station: { mount: 'floor', footprint: { w: 2, h: 1 }, blocks: true },
   doc_stack: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
+  device_bench: { mount: 'floor', footprint: { w: 2, h: 1 }, blocks: true },
+  sample_rack: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   binder_shelf: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   meeting_table: { mount: 'floor', footprint: { w: 3, h: 2 }, blocks: true },
   stool: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: false, seat: true },

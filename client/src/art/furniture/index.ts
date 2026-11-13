@@ -72,6 +72,10 @@ function build(kind: FurnitureKind, variant: string | undefined, state: number, 
       return O.reviewBoard();
     case 'doc_stack':
       return O.docStack();
+    case 'device_bench':
+      return O.deviceBench();
+    case 'sample_rack':
+      return O.sampleRack();
     case 'binder_shelf':
       return O.binderShelf(seed);
     case 'meeting_table':

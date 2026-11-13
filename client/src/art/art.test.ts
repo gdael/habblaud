@@ -10,7 +10,7 @@ import { PixelBuf } from './core/pixbuf';
 import type { BufSprite } from './core/sprite';
 import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
-import { MTC_PALETTE, coffeeStation, docStack, draftingBoard, monitorWall, moodboard, reviewBoard, secondMonitor } from './furniture/office';
+import { MTC_PALETTE, coffeeStation, deviceBench, docStack, draftingBoard, monitorWall, moodboard, reviewBoard, sampleRack, secondMonitor } from './furniture/office';
 import { M } from './furniture/kit';
 import { outlineFor, parseColor, ramp, type Ramp } from './core/color';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
@@ -645,6 +645,47 @@ describe('móveis', () => {
     expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
     expect(offPalette(s.buf, DOC_STACK_RAMPS())).toEqual([]);
     expect(offPalette(withOffBrandPixel(s.buf), DOC_STACK_RAMPS())).toEqual(['#e2604f']);
+  });
+
+  const DEVICE_BENCH_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.deep, 0.07)];
+  const SAMPLE_RACK_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.green, 0.08)];
+
+  it('device_bench: 2x1 do tamanho do footprint, bloqueia, bancada com aparelhos escuros e brilhos verde/branco, só cores MTC, âmbar só de destaque', () => {
+    const def = FURNITURE.device_bench;
+    expect(def.mount).toBe('floor');
+    expect(def.blocks).toBe(true);
+    expect(def.footprint).toEqual({ w: 2, h: 1 });
+    const s = deviceBench().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(def.footprint.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (def.footprint.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy + def.footprint.h * TILE);
+    expect(s.buf.countOpaque()).toBeGreaterThan(300);
+    // aparelhos escuros (navy profundo) com brilhos de tela verde e branco
+    expect(countColor(s.buf, '#041D56') + countColor(s.buf, ramp(MTC_PALETTE.deep, 0.07).dd)).toBeGreaterThan(20);
+    expect(countColor(s.buf, '#35A83F')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#FFFFFF')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#A9AEC4')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#FEC00B')).toBeGreaterThanOrEqual(1);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
+    expect(offPalette(s.buf, DEVICE_BENCH_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), DEVICE_BENCH_RAMPS())).toEqual(['#e2604f']);
+  });
+
+  it('sample_rack: 1x1 do tamanho do footprint, bloqueia, rack navy com bandejas etiquetadas verde/branco/Mist/navy, só cores MTC, âmbar só de destaque', () => {
+    const def = FURNITURE.sample_rack;
+    expect(def.mount).toBe('floor');
+    expect(def.blocks).toBe(true);
+    expect(def.footprint).toEqual({ w: 1, h: 1 });
+    const s = sampleRack().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(def.footprint.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (def.footprint.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy + def.footprint.h * TILE);
+    expect(s.buf.countOpaque()).toBeGreaterThan(150);
+    for (const hex of ['#1E2C5D', '#35A83F', '#FFFFFF', '#A9AEC4', '#0A1F54']) expect(countColor(s.buf, hex), hex).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#FEC00B')).toBeGreaterThanOrEqual(1);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
+    expect(offPalette(s.buf, SAMPLE_RACK_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), SAMPLE_RACK_RAMPS())).toEqual(['#e2604f']);
   });
 
   it('normaliza variantes, estados e sementes', () => {
