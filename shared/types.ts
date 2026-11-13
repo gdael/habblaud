@@ -194,7 +194,8 @@ export interface AgentInfo {
 }
 
 /** MTC: themed resident room interior (roster `room` field). No variant = the stock project room. */
-export type RoomKind = 'lead' | 'studio' | 'devbay' | 'review' | 'testlab' | 'server';
+export const ROOM_KINDS = ['lead', 'studio', 'devbay', 'review', 'testlab', 'server'] as const;
+export type RoomKind = (typeof ROOM_KINDS)[number];
 
 export interface RoomInfo {
   /** Chave estável: cwd normalizado do projeto. */

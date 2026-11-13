@@ -550,7 +550,8 @@ describe("laboratório de testes (variante 'testlab'): bancada de aparelhos e ra
       expect(desks.length, key).toBeLessThanOrEqual(2);
       expect(desks.map((d) => d.rank).sort(), key).toEqual(desks.length === 2 ? [0, 1] : [0]);
       expect(room.furniture.filter((f) => f.kind === 'device_bench').length, key).toBeGreaterThanOrEqual(1);
-      expect(room.furniture.filter((f) => f.kind === 'sample_rack').length, key).toBeGreaterThanOrEqual(1);
+      expect(room.furniture.filter((f) => f.kind === 'device_bench').length, key).toBe(2);
+      expect(room.furniture.filter((f) => f.kind === 'sample_rack').length, key).toBe(3);
       expect(room.wallItems.some((w) => w.kind === 'whiteboard'), key).toBe(true);
       expect(room.furniture.some((f) => f.kind === 'plant_tall' || f.kind === 'plant_small'), key).toBe(true);
       expect(room.rugs.length, key).toBeGreaterThan(0);

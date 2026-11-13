@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, beforeAll, vi, afterEach } from 'vitest';
-import type { Activity, PermissionRequestInfo } from '../../shared/types';
+import { ROOM_KINDS, type Activity, type PermissionRequestInfo } from '../../shared/types';
 import { log, setQuiet } from '../log.js';
 import { tempDir } from '../test/fixtures.js';
 import { NameStore } from './names';
@@ -69,6 +69,9 @@ describe('residents', () => {
     const roster = parseRoster(shipped());
     expect(roster).toHaveLength(6);
     expect(roster.find((d) => d.id === 'hiraya')!.cwd).toBe('C:/ClaudeCode_v2');
+  });
+  it('every shipped roster room is a known RoomKind', () => {
+    for (const d of shipped().residents) expect(ROOM_KINDS as readonly string[], d.id).toContain(d.room);
   });
 });
 

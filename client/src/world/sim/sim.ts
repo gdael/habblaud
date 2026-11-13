@@ -1,7 +1,7 @@
 // Simulação do escritório: concilia snapshots do servidor com os personagens e salas do mundo,
 // planeja comportamentos e executa as filas de passos a cada frame.
 import { partsKey } from '../../../../shared/appearance';
-import type { AgentInfo, OfficeSnapshot, Provider, RoomInfo } from '../../../../shared/types';
+import type { AgentInfo, OfficeSnapshot, Provider, RoomInfo, RoomKind } from '../../../../shared/types';
 import type { ArtModule, Dir, RoomTheme } from '../../art/api';
 import { SERVER_THEME } from '../../art/theme';
 import type { WorldOptions } from '../api';
@@ -188,7 +188,14 @@ export class Sim {
         continue;
       }
       if (rs.info.name !== r.name || rs.info.seed !== r.seed) rs.version++;
+      const variantChanged = rs.info.variant !== r.variant;
       rs.info = r;
+      if (variantChanged) {
+        // MTC: a new interior kind rebuilds the layout (and the theme, if the legacy server look toggled)
+        rs.layout = layoutProjectRoom({ id: rs.id, slot: rs.slot, seed: rs.seed, variant: this.roomKindOf(r) }, rs.theme);
+        rs.version++;
+        layoutDirty = true;
+      }
       if (!rs.listed) {
         rs.listed = true;
         rs.readyToDismantleAt = 0;
@@ -311,9 +318,19 @@ export class Sim {
     if (this.lastSnapshot) this.applySnapshot(this.lastSnapshot, now);
   }
 
+  /** MTC: legacy server room: by name (Server/Rede) or Makisig's resident room. Keeps the dark theme. */
+  private isLegacyServer(r: RoomInfo): boolean {
+    return /server.*network|network.*server/i.test(r.name) || r.id === 'resident:makisig';
+  }
+
+  /** MTC: effective interior kind. The legacy server rule outranks the roster variant. */
+  private roomKindOf(r: RoomInfo): RoomKind | undefined {
+    return this.isLegacyServer(r) ? 'server' : r.variant;
+  }
+
   private createRoom(r: RoomInfo, first: boolean, now: number): RoomState {
     // MTC: Makisig's resident room keeps the dark server look.
-    const serverRoom = /server.*network|network.*server/i.test(r.name) || r.id === 'resident:makisig';
+    const serverRoom = this.isLegacyServer(r);
     let theme = FALLBACK_THEME;
     try {
       theme = serverRoom ? { ...SERVER_THEME, wall: { ...SERVER_THEME.wall } } : (this.art.roomTheme(r.seed) ?? FALLBACK_THEME);
@@ -322,7 +339,7 @@ export class Sim {
     }
     // a primeira vaga livre do prédio (o slot do servidor só dá a ordem de chegada)
     const slot = this.freeSlot();
-    const layout = layoutProjectRoom({ id: r.id, slot, seed: r.seed, serverRoom, variant: r.variant }, theme);
+    const layout = layoutProjectRoom({ id: r.id, slot, seed: r.seed, variant: this.roomKindOf(r) }, theme);
     const rs = new RoomState(r, theme, layout, first ? 'ready' : 'building', now, first, slot);
     this.rooms.set(r.id, rs);
     return rs;
@@ -735,7 +752,7 @@ export class Sim {
   moveRoom(room: RoomState, slot: number, now: number): void {
     const before = room.layout;
     const ghostId = `${room.id}#mudança${++this.moveSeq}`;
-    const ghostLayout = layoutProjectRoom({ id: ghostId, slot: room.slot, seed: room.seed, variant: room.info.variant }, room.theme);
+    const ghostLayout = layoutProjectRoom({ id: ghostId, slot: room.slot, seed: room.seed, variant: this.roomKindOf(room.info) }, room.theme);
     const ghost = new RoomState({ ...room.info, id: ghostId, seed: room.seed }, room.theme, ghostLayout, 'ready', now, false, room.slot);
     ghost.ghost = true;
     ghost.listed = false;
@@ -751,7 +768,7 @@ export class Sim {
     });
 
     room.slot = slot;
-    room.layout = layoutProjectRoom({ id: room.id, slot, seed: room.seed, variant: room.info.variant }, room.theme);
+    room.layout = layoutProjectRoom({ id: room.id, slot, seed: room.seed, variant: this.roomKindOf(room.info) }, room.theme);
     room.setPhase('building', now);
     room.lightOn = false;
     room.lightAt = -1e9;

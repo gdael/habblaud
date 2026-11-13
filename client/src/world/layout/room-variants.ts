@@ -519,7 +519,6 @@ function placeTestlabInterior(c: InteriorCtx): void {
 
   // ---- apoio na parede norte (sem cobrir quadro, placa ou janela) e a coluna leste
   placeNorthSupport(c);
-  furn('sample_rack', 14, 4, undefined, { order: 0.3 });
   furn('floor_lamp', 14, 6, undefined, { order: 0.33 });
   furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
 
@@ -529,7 +528,6 @@ function placeTestlabInterior(c: InteriorCtx): void {
   furn('binder_shelf', 3, 10, undefined, { order: 0.22 });
   furn('filing_cabinet', 4, 10, undefined, { order: 0.23 });
   furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
-  furn('sample_rack', 12, 10, undefined, { order: 0.26 });
   furn('trash_bin', 13, 10, undefined, { order: 0.27 });
   furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.28 });
 

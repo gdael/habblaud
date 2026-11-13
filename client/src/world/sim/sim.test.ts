@@ -838,6 +838,27 @@ describe('MTC residents', () => {
     expect(racks('/p')).toBe(0);
   });
 
+  it('a live room whose variant changes gets the new interior', () => {
+    const sim = newSim();
+    const r: RoomInfo = { ...room('resident:other', 0), name: 'Other' };
+    sim.applySnapshot(snap([r], []), T0);
+    const kinds = () => new Set(sim.rooms.get('resident:other')!.layout.furniture.map((f) => f.kind));
+    expect(kinds().has('drafting_board')).toBe(false);
+    sim.applySnapshot(snap([{ ...r, variant: 'studio' }], [], 2), T0);
+    expect(kinds().has('drafting_board')).toBe(true);
+    expect(sim.building.spots.some((s) => s.id.startsWith('resident:other'))).toBe(true);
+  });
+
+  it('a name-only server room keeps its racks after a slot move', () => {
+    const sim = newSim();
+    const r: RoomInfo = { ...room('/srv', 0), name: 'Server Network' };
+    sim.applySnapshot(snap([r], []), T0);
+    const racks = () => sim.rooms.get('/srv')!.layout.furniture.filter((f) => f.kind === 'server_rack').length;
+    expect(racks()).toBeGreaterThanOrEqual(3);
+    sim.moveRoom(sim.rooms.get('/srv')!, 1, T0);
+    expect(racks()).toBeGreaterThanOrEqual(3);
+  });
+
   it("Makisig's resident room gets the dark server theme", () => {
     const sim = newSim();
     const r: RoomInfo = { ...room('resident:makisig', 0), name: 'Makisig' };

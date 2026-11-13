@@ -1,10 +1,9 @@
 // Roster de residentes fixos (MTC): quem é quem, e como casar um papel de agente com um residente.
 import { readFileSync } from 'node:fs';
 import { log, errMsg } from '../log.js';
-import type { RoomKind } from '../../shared/types.js';
+import { ROOM_KINDS, type RoomKind } from '../../shared/types.js';
 import { normalizeCwd } from './rooms.js';
 
-export const ROOM_KINDS: readonly RoomKind[] = ['lead', 'studio', 'devbay', 'review', 'testlab', 'server'];
 
 export interface ResidentDef {
   id: string;
@@ -59,7 +58,7 @@ export function parseRoster(raw: unknown): ResidentDef[] {
     if (r.type === 'main') def.cwd = str(r.cwd, `${p}.cwd`);
     else if (r.cwd !== undefined) def.cwd = str(r.cwd, `${p}.cwd`);
     if (r.room !== undefined) {
-      if (typeof r.room !== 'string' || !ROOM_KINDS.includes(r.room as RoomKind)) {
+      if (typeof r.room !== 'string' || !(ROOM_KINDS as readonly string[]).includes(r.room)) {
         throw new Error(`roster: ${p}.room must be one of ${ROOM_KINDS.join(', ')}`);
       }
       def.room = r.room as RoomKind;
