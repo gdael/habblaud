@@ -297,8 +297,8 @@
 .ui-away__code {
   padding: 2px 7px;
   border-radius: 6px;
-  border: 1px solid rgba(124, 200, 255, 0.35);
-  background: rgba(124, 200, 255, 0.1);
+  border: 1px solid rgba(53, 168, 63, 0.35);
+  background: rgba(53, 168, 63, 0.1);
   color: #cfeaff;
   font: 700 12.5px/1.4 var(--font-mono);
   letter-spacing: 0.06em;
