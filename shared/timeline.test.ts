@@ -3,6 +3,7 @@ import type { AccountInfo, AgentInfo, OfficeSnapshot, RoomInfo } from './types';
 import {
   applyChanges,
   compactAgent,
+  compactRoom,
   compactSnapshot,
   dayKey,
   dayStart,
@@ -14,6 +15,7 @@ import {
   shiftDay,
   toAccountInfo,
   toAgentInfo,
+  toRoomInfo,
   type TimelineFrame,
 } from './timeline';
 
@@ -211,5 +213,22 @@ describe('timeline: leitura do arquivo', () => {
     const plain = compactAgent(agent('.claude:2'));
     expect('parts' in plain).toBe(false);
     expect(toAgentInfo(plain).parts).toBeUndefined();
+  });
+
+  it('variante temática da sala vai e volta; sala sem variante continua sem; gravar de novo não gera delta', () => {
+    const themed: RoomInfo = { ...room('/p/qa'), variant: 'testlab' };
+    const c = compactRoom(themed);
+    expect(c.variant).toBe('testlab');
+    expect(toRoomInfo(c)).toEqual(themed);
+    // passa pelo arquivo (JSON) e volta igual
+    expect(toRoomInfo(JSON.parse(JSON.stringify(c)))).toEqual(themed);
+    const stock = compactRoom(room('/p/loja'));
+    expect('variant' in stock).toBe(false);
+    expect('variant' in toRoomInfo(stock)).toBe(false);
+    // o mesmo snapshot gravado duas vezes continua sem delta; mudar a variante gera delta
+    const a = compactSnapshot(snap([], [themed]));
+    expect(diffFrames(a, compactSnapshot(snap([], [{ ...themed }])))).toBeNull();
+    const d = diffFrames(a, compactSnapshot(snap([], [{ ...themed, variant: 'studio' }])));
+    expect(d?.rooms?.[0]?.[0]).toBe('/p/qa');
   });
 });

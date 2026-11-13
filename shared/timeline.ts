@@ -13,7 +13,7 @@
 // Só entram os campos que o mundo e a interface usam para desenhar, com os resumos de atividade já
 // mascarados (a mesma exposição do /api/snapshot): nada de detalhe de comando, tarefa ou transcript.
 import type { AppearanceParts } from './appearance';
-import type { AccountInfo, AccountUsage, Activity, ActivityKind, AgentInfo, AgentKind, AgentStatus, OfficeSnapshot, Provider, RoomInfo, ShellJob } from './types';
+import type { AccountInfo, AccountUsage, Activity, ActivityKind, AgentInfo, AgentKind, AgentStatus, OfficeSnapshot, Provider, RoomInfo, RoomKind, ShellJob } from './types';
 
 export const TIMELINE_VERSION = 1;
 
@@ -72,6 +72,8 @@ export interface TimelineRoom {
   slot: number;
   seed: number;
   createdAt: number;
+  /** Variante temática da sala do residente (RoomInfo.variant); ausente = sala padrão. */
+  variant?: RoomKind;
   demo?: true;
 }
 
@@ -210,6 +212,7 @@ export function compactAgent(a: AgentInfo, demo = false): TimelineAgent {
 
 export function compactRoom(r: RoomInfo, demo = false): TimelineRoom {
   const out: TimelineRoom = { id: r.id, name: r.name, path: r.path, slot: r.slot, seed: r.seed, createdAt: r.createdAt };
+  if (r.variant) out.variant = r.variant;
   if (demo) out.demo = true;
   return out;
 }
@@ -438,7 +441,9 @@ export function toAgentInfo(t: TimelineAgent, recent: Activity[] = []): AgentInf
 }
 
 export function toRoomInfo(r: TimelineRoom): RoomInfo {
-  return { id: r.id, name: r.name, path: r.path, slot: r.slot, seed: r.seed, createdAt: r.createdAt };
+  const out: RoomInfo = { id: r.id, name: r.name, path: r.path, slot: r.slot, seed: r.seed, createdAt: r.createdAt };
+  if (r.variant) out.variant = r.variant;
+  return out;
 }
 
 export function toAccountInfo(a: TimelineAccount, at: number): AccountInfo {
