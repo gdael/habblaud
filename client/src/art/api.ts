@@ -153,6 +153,8 @@ export type FurnitureKind =
   | 'server_rack' // 1x1 rack de servidor alto e escuro com LEDs (sala Servidor/Rede).
   | 'monitor_wall' // 3x1 painel de chão com 3 telas de monitoramento (status verde/âmbar), sala Servidor/Rede (MTC).
   | 'drafting_board' // 2x1 prancheta inclinada sobre pés, com folha de blueprint navy e traços verdes, estúdio do Designer (MTC).
+  | 'second_monitor' // 1x1 gaveteiro navy com um segundo monitor em pé (retrato), tela escura com código verde; decorativo ao lado da mesa (a tela viva é só a da 'desk'), dev bay do Developer (MTC).
+  | 'coffee_station' // 2x1 bancada navy com tampo de madeira, máquina de espresso, canecas e uma plantinha, dev bay do Developer (MTC).
   | 'binder_shelf' // 1x1 estante alta e estreita com pastas coloridas (azul/laranja/verde) e caixas.
   | 'meeting_table' // 3x2 mesa de reunião/bancada para subagentes.
   | 'stool' // 1x1 assento simples (banqueta). Personagem pode sentar em qualquer direção.
@@ -235,6 +237,8 @@ export const FURNITURE: Readonly<Record<FurnitureKind, FurnitureDef>> = {
   server_rack: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   monitor_wall: { mount: 'floor', footprint: { w: 3, h: 1 }, blocks: true },
   drafting_board: { mount: 'floor', footprint: { w: 2, h: 1 }, blocks: true },
+  second_monitor: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
+  coffee_station: { mount: 'floor', footprint: { w: 2, h: 1 }, blocks: true },
   binder_shelf: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   meeting_table: { mount: 'floor', footprint: { w: 3, h: 2 }, blocks: true },
   stool: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: false, seat: true },

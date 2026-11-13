@@ -163,7 +163,7 @@ describe('layout do prédio', () => {
 });
 
 /** Móveis de chão altos que escondem o que está pendurado na parede logo atrás. */
-const TALL_FLOOR = new Set<FurnitureKind>(['plant_tall', 'bookshelf', 'binder_shelf', 'fridge', 'vending_machine', 'arcade', 'water_cooler', 'floor_lamp', 'toilet_stall', 'drafting_board']);
+const TALL_FLOOR = new Set<FurnitureKind>(['plant_tall', 'bookshelf', 'binder_shelf', 'fridge', 'vending_machine', 'arcade', 'water_cooler', 'floor_lamp', 'toilet_stall', 'drafting_board', 'coffee_station']);
 const WALL_DECOR = new Set<FurnitureKind>(['painting', 'poster', 'window', 'tv', 'whiteboard', 'sign', 'clock', 'mirror', 'door_frame', 'moodboard']);
 
 /** Itens de parede decorativos com algum móvel alto encostado na frente (ids). */
@@ -414,6 +414,59 @@ describe("estúdio (variante 'studio'): pranchetas e moodboard", () => {
   it('o residente escolhe a mesa de rank 0 e ela é alcançável a partir da porta', () => {
     for (const r of rooms) {
       const room = studio(r.slot, r.seed);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      const chosen = chooseSeat(room.spots, () => true, 'main');
+      expect(chosen?.kind, key).toBe('desk');
+      expect(chosen?.rank, key).toBe(0);
+      expect(room.furniture.some((f) => f.id === chosen!.deskId), key).toBe(true);
+      const b = assembleBuilding(columnsFor([r.slot]), [room]);
+      const reach = b.grid.reachableFrom(room.door!.x, room.door!.y);
+      expect(reach[chosen!.ty * b.grid.w + chosen!.tx], key).toBe(1);
+      expect(b.grid.walkable(chosen!.tx, chosen!.ty), key).toBe(true);
+    }
+  });
+});
+
+describe("dev bay (variante 'devbay'): duas mesas com segundo monitor e cantinho do café", () => {
+  const rooms = fixtureRooms(FIXTURE.stock);
+  const devbay = (slot: number, seed: number) => layoutProjectRoom({ id: `/devbay/${seed}`, slot, seed, variant: 'devbay' }, theme);
+
+  it('invariantes, 2 mesas, 2 segundos monitores ao lado das mesas, 1 café, quadro e plantas (12 sementes x lados x espelhamento)', () => {
+    // as 12 sementes cobrem os dois espelhamentos e os dois lados
+    expect(new Set(rooms.map((r) => roomVariant(r.seed).mirror)).size).toBe(2);
+    expect(new Set(rooms.map((r) => slotSide(r.slot))).size).toBe(2);
+    for (const r of rooms) {
+      const room = devbay(r.slot, r.seed);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      assertRoomInvariants(room);
+      const desks = room.spots.filter((s) => s.kind === 'desk');
+      expect(desks.length, key).toBe(2);
+      expect(desks.map((d) => d.rank).sort(), key).toEqual([0, 1]);
+      const monitors = room.furniture.filter((f) => f.kind === 'second_monitor');
+      expect(monitors, key).toHaveLength(2);
+      expect(room.furniture.filter((f) => f.kind === 'coffee_station'), key).toHaveLength(1);
+      expect(room.wallItems.some((w) => w.kind === 'whiteboard'), key).toBe(true);
+      expect(room.furniture.some((f) => f.kind === 'plant_tall' || f.kind === 'plant_small'), key).toBe(true);
+      // cada mesa tem um segundo monitor encostado ao lado, na mesma linha
+      for (const d of desks) {
+        const desk = room.furniture.find((f) => f.id === d.deskId)!;
+        const beside = monitors.filter((m) => m.ty === desk.ty && (m.tx === desk.tx + FURNITURE.desk.footprint.w || m.tx === desk.tx - 1));
+        expect(beside.length, `${key}: ${desk.id}`).toBeGreaterThanOrEqual(1);
+      }
+      // nenhum monitor em cima de um lugar (cadeira, banqueta, ponto em pé)
+      for (const m of monitors) expect(room.spots.some((s) => s.tx === m.tx && s.ty === m.ty), `${key}: ${m.id}`).toBe(false);
+      for (const f of room.furniture) {
+        const fp = FURNITURE[f.kind].footprint;
+        const inside = f.tx >= room.rect.x + 1 && f.tx + fp.w <= room.rect.x + 15 && f.ty >= room.rect.y + 2 && f.ty + fp.h <= room.rect.y + 11;
+        expect(inside, `${key}: ${f.id} fora do piso`).toBe(true);
+      }
+      expect(hiddenWallItems(room), key).toEqual([]);
+    }
+  });
+
+  it('o residente escolhe a mesa de rank 0 e ela é alcançável a partir da porta', () => {
+    for (const r of rooms) {
+      const room = devbay(r.slot, r.seed);
       const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
       const chosen = chooseSeat(room.spots, () => true, 'main');
       expect(chosen?.kind, key).toBe('desk');

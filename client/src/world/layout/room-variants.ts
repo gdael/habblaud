@@ -68,6 +68,9 @@ export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
     case 'studio':
       placeStudioInterior(c);
       return true;
+    case 'devbay':
+      placeDevbayInterior(c);
+      return true;
     default:
       return false;
   }
@@ -357,6 +360,56 @@ function placeStudioInterior(c: InteriorCtx): void {
   furn('bookshelf', 1, 10, undefined, { order: 0.2 });
   furn('plant_tall', 3, 10, pick(PLANTS_TALL), { order: 0.21 });
   furn('filing_cabinet', 4, 10, undefined, { order: 0.22 });
+  furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
+  seat('nook', 'beanbag', 12, 10, 'up', 'green', { order: 0.66 });
+  seat('nook', 'beanbag', 13, 10, 'up', 'blue', { order: 0.67 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.27 });
+
+  // pontos em pé para quem visita
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 8, 'right');
+}
+
+/**
+ * Dev bay (Developer): duas mesas lado a lado (a do Developer é a de rank 0), cada uma com um
+ * segundo monitor em pé encostado à direita (decorativo: a tela viva é só a da mesa), sobre um
+ * tapete nas cores do tema; o cantinho do café no lado leste com uma mesinha e duas banquetas; a
+ * estante e as plantas de apoio na parede norte. O quadro de tarefas é o quadro branco da casca.
+ */
+function placeDevbayInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, rug, pick, theme, seed } = c;
+
+  // ---- mesas: a do Developer (rank 0) e uma segunda (rank 1), de costas para a câmera; o
+  // segundo monitor fica na coluna logo à direita de cada mesa (nunca sobre a cadeira); o
+  // tapete do tema sob as mesas é o da casca da sala
+  for (let i = 0; i < 2; i++) {
+    const lx = 2 + i * 4;
+    const desk = furn('desk', lx, 6, theme.deskVariant, { order: 0.4 + i * 0.05, seat: `S${i}` });
+    furn('second_monitor', lx + 2, 6, undefined, { order: 0.42 + i * 0.05 });
+    seat('desk', 'office_chair', lx, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: i, side: 'S', order: 0.6 + i * 0.03 });
+  }
+  furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.41 });
+
+  // ---- cantinho do café (lado leste): bancada com espresso (quem pega café fica ao sul, virado
+  // para ela) e uma mesinha com duas banquetas para a pausa, sobre um tapete na cor do tema
+  rug(9.7, 3.9, 4.6, 4.6, shade(theme.carpet2, 0.25), seed + 4);
+  furn('coffee_station', 11, 3, undefined, { order: 0.3 });
+  spot('stand', 11, 4, 'up', { dy: -2 });
+  spot('stand', 12, 4, 'up', { dy: -2 });
+  furn('cafe_table', 11, 7, undefined, { order: 0.45 });
+  seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.65 });
+  seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.66 });
+
+  // ---- apoio na parede norte (sem cobrir quadro, placa ou janela) e a coluna leste
+  placeNorthSupport(c);
+  furn('binder_shelf', 14, 5, undefined, { order: 0.31 });
+  furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre)
+  furn('plant_tall', 1, 10, pick(PLANTS_TALL), { order: 0.2 });
+  furn('binder_shelf', 2, 10, undefined, { order: 0.21 });
+  furn('filing_cabinet', 3, 10, undefined, { order: 0.22 });
+  furn('trash_bin', 4, 10, undefined, { order: 0.23 });
   furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
   seat('nook', 'beanbag', 12, 10, 'up', 'green', { order: 0.66 });
   seat('nook', 'beanbag', 13, 10, 'up', 'blue', { order: 0.67 });

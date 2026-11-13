@@ -660,6 +660,126 @@ export function moodboard(): BufFurniture {
   return { base: s };
 }
 
+/**
+ * Segundo monitor (1x1, dev bay do Developer, MTC): gaveteiro navy da altura da mesa, com tampo
+ * Mist, e um monitor em pé (retrato) com moldura navy profunda, tela quase preta e linhas de
+ * código verdes (um terminal), com o cursor âmbar. Decorativo: é colocado ao lado da mesa (a tela
+ * viva é só a da 'desk'), por isso a tela não usa o fundo azul das telas das mesas nem tem região
+ * dinâmica.
+ */
+export function secondMonitor(): BufFurniture {
+  const s = floorSheet(1, 1, 26);
+  const b = s.buf;
+  const cab = ramp(MTC_PANEL, 0.07);
+  const top = ramp(MTC_MIST, 0.06);
+  const bezel = ramp(MTC_DEEP, 0.07);
+  // Gaveteiro (frente navy com duas gavetas e puxadores Mist).
+  frontFace(b, 1, 8, 14, 8, cab);
+  b.hline(1, 14, 11, cab.dd);
+  b.hline(1, 14, 12, cab.lt);
+  b.hline(6, 9, 9, top.base);
+  b.hline(6, 9, 14, top.base);
+  // Tampo Mist na altura do tampo das mesas, com a espessura da borda.
+  topFace(b, 0, -6, 16, 12, top);
+  b.hline(0, 15, 6, top.dk);
+  b.hline(0, 15, 7, top.dd);
+  // Monitor em pé (retrato): pé e base navy sobre o tampo.
+  b.rect(7, -7, 2, 4, bezel.lt);
+  b.rect(4, -3, 8, 2, bezel.base);
+  b.hline(4, 11, -3, bezel.lt);
+  // Moldura e tela.
+  const x = 3;
+  const y = -25;
+  const w = 10;
+  const h = 18;
+  b.rect(x, y, w, h, bezel.base);
+  b.hline(x, x + w - 1, y, bezel.hi);
+  b.vline(x, y, y + h - 1, bezel.lt);
+  b.hline(x, x + w - 1, y + h - 1, bezel.dk);
+  const sx = x + 1;
+  const sy = y + 1;
+  b.rect(sx, sy, w - 2, h - 3, bezel.dd);
+  // Código: prompt branco, linhas verdes recuadas, comentário em verde suave, cursor âmbar.
+  const lines: [number, number, string][] = [
+    [0, 3, MTC_WHITE],
+    [1, 5, MTC_GREEN],
+    [1, 4, MTC_SOFT],
+    [2, 4, MTC_GREEN],
+    [2, 5, MTC_GREEN],
+    [1, 3, MTC_SOFT],
+    [0, 6, MTC_GREEN],
+  ];
+  lines.forEach(([indent, len, c], i) => b.hline(sx + 1 + indent, sx + indent + len, sy + 1 + i * 2, c));
+  b.set(sx + 1, sy + 14, MTC_AMBER);
+  // LED de energia verde no rodapé da moldura.
+  b.set(x + w - 2, y + h - 1, MTC_GREEN);
+  b.outline();
+  contact(b, 0, 13, 16, 4, 0.2);
+  return { base: s };
+}
+
+/**
+ * Cantinho do café (2x1, dev bay do Developer, MTC): bancada com portas navy e tampo de madeira
+ * (M.oak), uma máquina de espresso em Mist com painel navy, LED verde e uma xícara branca sob o
+ * bico, duas canecas da marca (branca com faixa verde, navy) e uma plantinha num vaso branco.
+ */
+export function coffeeStation(): BufFurniture {
+  const s = floorSheet(2, 1, 28);
+  const b = s.buf;
+  const cab = ramp(MTC_PANEL, 0.07);
+  const top = M.oak;
+  const steel = ramp(MTC_MIST, 0.06);
+  const leaf = ramp(MTC_GREEN, 0.08);
+  // Bancada: duas portas navy com puxadores Mist e rodapé escuro.
+  frontFace(b, 0, -2, 32, 18, cab);
+  b.vline(15, -1, 14, cab.dd);
+  b.vline(16, -1, 14, cab.lt);
+  b.rect(12, 3, 1, 4, steel.base);
+  b.rect(19, 3, 1, 4, steel.base);
+  b.hline(0, 31, 15, cab.dd);
+  // Tampo de madeira com a espessura da borda.
+  topFace(b, 0, -10, 32, 8, top);
+  b.hline(0, 31, -3, top.dk);
+  // Máquina de espresso (corpo Mist, topo claro, painel navy com LED verde e visor branco).
+  const mx = 2;
+  topFace(b, mx, -27, 14, 3, steel);
+  b.rect(mx, -24, 14, 17, steel.base);
+  b.vline(mx, -24, -8, steel.lt);
+  b.vline(mx + 13, -24, -8, steel.dk);
+  b.rect(mx + 2, -23, 10, 4, MTC_PANEL);
+  b.hline(mx + 3, mx + 7, -22, MTC_WHITE);
+  b.set(mx + 10, -22, MTC_GREEN);
+  b.set(mx + 10, -20, MTC_GREEN);
+  b.hline(mx + 3, mx + 5, -20, steel.lt);
+  // Grupo (bico) escuro, xícara branca embaixo e bandeja de gotejamento.
+  b.rect(mx + 5, -17, 4, 2, cab.dd);
+  b.set(mx + 6, -15, cab.base);
+  b.rect(mx + 5, -13, 4, 3, MTC_WHITE);
+  b.hline(mx + 5, mx + 8, -12, MTC_GREEN);
+  b.set(mx + 9, -12, MTC_WHITE);
+  b.rect(mx + 1, -9, 12, 2, steel.dk);
+  b.hline(mx + 1, mx + 12, -9, steel.dd);
+  // Vaporizador do lado direito.
+  b.vline(mx + 14, -18, -12, steel.dk);
+  b.set(mx + 14, -11, steel.dd);
+  // Canecas da marca: branca com faixa verde e navy com faixa branca.
+  b.rect(19, -9, 4, 5, MTC_WHITE);
+  b.hline(19, 22, -7, MTC_GREEN);
+  b.vline(23, -8, -6, steel.base);
+  b.rect(24, -8, 3, 4, MTC_NAVY);
+  b.hline(24, 26, -7, MTC_WHITE);
+  // Plantinha num vaso branco no canto.
+  b.rect(28, -9, 3, 4, MTC_WHITE);
+  b.hline(28, 30, -9, steel.hi);
+  b.ellipse(29.5, -12, 2.5, 2.2, leaf.base);
+  b.set(28, -13, leaf.lt);
+  b.set(30, -11, leaf.dk);
+  b.set(29, -15, leaf.lt);
+  b.outline();
+  contact(b, 0, 13, 32, 4, 0.2);
+  return { base: s };
+}
+
 export function filingCabinet(): BufFurniture {
   const s = floorSheet(1, 1, 8);
   const b = s.buf;

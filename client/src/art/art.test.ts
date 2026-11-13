@@ -10,7 +10,7 @@ import { PixelBuf } from './core/pixbuf';
 import type { BufSprite } from './core/sprite';
 import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
-import { MTC_PALETTE, draftingBoard, monitorWall, moodboard } from './furniture/office';
+import { MTC_PALETTE, coffeeStation, draftingBoard, monitorWall, moodboard, secondMonitor } from './furniture/office';
 import { M } from './furniture/kit';
 import { outlineFor, parseColor, ramp, type Ramp } from './core/color';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
@@ -550,6 +550,60 @@ describe('móveis', () => {
     expect(s.buf.countOpaque()).toBeGreaterThan(200);
     for (const hex of ['#0A1F54', '#1E2C5D', '#35A83F', '#4E8E5C', '#A9AEC4']) expect(countColor(s.buf, hex), hex).toBeGreaterThan(0);
     expect(offPalette(s.buf, MOODBOARD_RAMPS())).toEqual([]);
+  });
+
+  const SECOND_MONITOR_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.deep, 0.07)];
+  const COFFEE_RAMPS = (): Ramp[] => [M.oak, ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.green, 0.08)];
+
+  /** Copia o buffer e pinta um pixel opaco com uma cor fora da marca (prova que o teste de paleta pega). */
+  function withOffBrandPixel(buf: PixelBuf): PixelBuf {
+    const out = new PixelBuf(buf.w, buf.h);
+    out.data.set(buf.data);
+    for (let i = 0; i < out.data.length; i += 4) {
+      if (out.data[i + 3] > 200) {
+        out.data[i] = 0xe2;
+        out.data[i + 1] = 0x60;
+        out.data[i + 2] = 0x4f;
+        break;
+      }
+    }
+    return out;
+  }
+
+  it('second_monitor: 1x1 do tamanho do footprint, tela escura em pé com linhas de código verdes e só cores MTC', () => {
+    const def = FURNITURE.second_monitor;
+    expect(def.mount).toBe('floor');
+    expect(def.blocks).toBe(true);
+    const fp = def.footprint;
+    expect(fp).toEqual({ w: 1, h: 1 });
+    const s = secondMonitor().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(fp.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (fp.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy + fp.h * TILE);
+    expect(s.buf.countOpaque()).toBeGreaterThan(150);
+    // não é uma tela "viva": sem região dinâmica, e sem o fundo azul das telas das mesas
+    expect(s.rects?.screen).toBeUndefined();
+    expect(countColor(s.buf, '#22324f')).toBe(0);
+    expect(countColor(s.buf, '#35A83F') + countColor(s.buf, '#4E8E5C')).toBeGreaterThan(8);
+    expect(offPalette(s.buf, SECOND_MONITOR_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), SECOND_MONITOR_RAMPS())).toEqual(['#e2604f']);
+  });
+
+  it('coffee_station: 2x1 do tamanho do footprint, bancada com máquina de espresso, canecas e planta, só cores MTC/madeira do kit', () => {
+    const def = FURNITURE.coffee_station;
+    expect(def.mount).toBe('floor');
+    expect(def.blocks).toBe(true);
+    const fp = def.footprint;
+    expect(fp).toEqual({ w: 2, h: 1 });
+    const s = coffeeStation().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(fp.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (fp.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy + fp.h * TILE);
+    expect(s.buf.countOpaque()).toBeGreaterThan(300);
+    for (const hex of ['#1E2C5D', '#A9AEC4', '#FFFFFF', '#35A83F']) expect(countColor(s.buf, hex), hex).toBeGreaterThan(0);
+    expect(countColor(s.buf, M.oak.base)).toBeGreaterThan(0);
+    expect(offPalette(s.buf, COFFEE_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), COFFEE_RAMPS())).toEqual(['#e2604f']);
   });
 
   it('normaliza variantes, estados e sementes', () => {
