@@ -149,8 +149,19 @@ describe('residents: room variant', () => {
     const [d] = parseRoster({ residents: [{ ...base, id: 'a', room: 'studio' }] });
     expect(d.room).toBe('studio');
   });
-  it('parseRoster rejects an unknown room naming the field', () => {
-    expect(() => parseRoster({ residents: [{ ...base, id: 'a', room: 'nope' }] })).toThrow(/residents\[0\]\.room/);
+  it('parseRoster drops an unknown room with one warning naming the field, keeping the rest', () => {
+    const warn = vi.spyOn(log, 'warnOnce').mockImplementation(() => {});
+    const defs = parseRoster({ residents: [{ ...base, id: 'a', name: 'Ana', room: 'nope' }, { ...base, id: 'b', room: 'studio' }] });
+    expect(defs).toHaveLength(2);
+    expect(defs[0]).toMatchObject({ id: 'a', name: 'Ana' });
+    expect('room' in defs[0]).toBe(false);
+    expect(defs[1].room).toBe('studio');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][1]).toMatch(/residents\[0\]\.room/);
+    warn.mockRestore();
+  });
+  it('parseRoster still rejects other invalid fields (duplicate id)', () => {
+    expect(() => parseRoster({ residents: [{ ...base, id: 'a' }, { ...base, id: 'A' }] })).toThrow(/residents\[1\]\.id duplicate/);
   });
   it('shipped roster maps the six residents to their variants', () => {
     const m = Object.fromEntries(parseRoster(shipped()).map((d) => [d.id, d.room]));

@@ -30,7 +30,7 @@ function strList(v: unknown, field: string): string[] {
   return (v as string[]).map((x) => x.trim());
 }
 
-/** Valida o JSON do roster à mão; lança Error nomeando o campo inválido. */
+/** Valida o JSON do roster à mão; lança Error nomeando o campo inválido (exceto `room` inválido: aviso e o campo cai). */
 export function parseRoster(raw: unknown): ResidentDef[] {
   const list = (raw as { residents?: unknown } | null)?.residents;
   if (!Array.isArray(list)) throw new Error('roster: residents must be an array');
@@ -58,10 +58,10 @@ export function parseRoster(raw: unknown): ResidentDef[] {
     if (r.type === 'main') def.cwd = str(r.cwd, `${p}.cwd`);
     else if (r.cwd !== undefined) def.cwd = str(r.cwd, `${p}.cwd`);
     if (r.room !== undefined) {
+      // sala temática inválida: só esse campo cai (sala padrão), com um aviso; o resto do roster vale
       if (typeof r.room !== 'string' || !(ROOM_KINDS as readonly string[]).includes(r.room)) {
-        throw new Error(`roster: ${p}.room must be one of ${ROOM_KINDS.join(', ')}`);
-      }
-      def.room = r.room as RoomKind;
+        log.warnOnce(`roster-room:${id}:${String(r.room)}`, `roster: ${p}.room must be one of ${ROOM_KINDS.join(', ')}; "${String(r.room)}" ignored (stock room)`);
+      } else def.room = r.room as RoomKind;
     }
     return def;
   });
