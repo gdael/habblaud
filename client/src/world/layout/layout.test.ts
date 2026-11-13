@@ -11,6 +11,7 @@ import { layoutExterior, slotShell } from './exterior';
 import { RECEPTION_ID } from './core';
 import type { AreaLayout } from './types';
 import { assertRoomInvariants } from './layout-test-support';
+import { chooseSeat } from '../sim/behavior';
 
 const theme: RoomTheme = {
   carpet: '#4f6d8f',
@@ -162,8 +163,8 @@ describe('layout do prédio', () => {
 });
 
 /** Móveis de chão altos que escondem o que está pendurado na parede logo atrás. */
-const TALL_FLOOR = new Set<FurnitureKind>(['plant_tall', 'bookshelf', 'binder_shelf', 'fridge', 'vending_machine', 'arcade', 'water_cooler', 'floor_lamp', 'toilet_stall']);
-const WALL_DECOR = new Set<FurnitureKind>(['painting', 'poster', 'window', 'tv', 'whiteboard', 'sign', 'clock', 'mirror', 'door_frame']);
+const TALL_FLOOR = new Set<FurnitureKind>(['plant_tall', 'bookshelf', 'binder_shelf', 'fridge', 'vending_machine', 'arcade', 'water_cooler', 'floor_lamp', 'toilet_stall', 'drafting_board']);
+const WALL_DECOR = new Set<FurnitureKind>(['painting', 'poster', 'window', 'tv', 'whiteboard', 'sign', 'clock', 'mirror', 'door_frame', 'moodboard']);
 
 /** Itens de parede decorativos com algum móvel alto encostado na frente (ids). */
 function hiddenWallItems(area: AreaLayout): string[] {
@@ -360,6 +361,65 @@ describe("sala do líder (variante 'lead'): mesas, reunião e estantes", () => {
         expect(inside, `${key}: ${f.id} fora do piso`).toBe(true);
       }
       expect(hiddenWallItems(room), key).toEqual([]);
+    }
+  });
+});
+
+/** Pares de itens de parede (face) cujos trechos se sobrepõem mais que 2 px, envolvendo `kind`. */
+function wallOverlaps(area: AreaLayout, kind: FurnitureKind): string[] {
+  const face = area.wallItems.filter((w) => w.on === 'face');
+  const half = (k: FurnitureKind) => (FURNITURE[k].footprint.w * TILE) / 2;
+  const out: string[] = [];
+  for (const a of face) {
+    if (a.kind !== kind) continue;
+    for (const o of face) {
+      if (o === a) continue;
+      const overlap = Math.min(a.cx + half(a.kind), o.cx + half(o.kind)) - Math.max(a.cx - half(a.kind), o.cx - half(o.kind));
+      if (overlap > 2) out.push(`${a.id} sobre ${o.id}`);
+    }
+  }
+  return out;
+}
+
+describe("estúdio (variante 'studio'): pranchetas e moodboard", () => {
+  const rooms = fixtureRooms(FIXTURE.stock);
+  const studio = (slot: number, seed: number) => layoutProjectRoom({ id: `/studio/${seed}`, slot, seed, variant: 'studio' }, theme);
+
+  it('invariantes, 1-2 mesas, 2+ pranchetas, 1 moodboard e quadro (12 sementes x lados x espelhamento)', () => {
+    for (const r of rooms) {
+      const room = studio(r.slot, r.seed);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      assertRoomInvariants(room);
+      const desks = room.spots.filter((s) => s.kind === 'desk');
+      expect(desks.length, key).toBeGreaterThanOrEqual(1);
+      expect(desks.length, key).toBeLessThanOrEqual(2);
+      expect(room.furniture.filter((f) => f.kind === 'drafting_board').length, key).toBeGreaterThanOrEqual(2);
+      expect(room.wallItems.filter((w) => w.kind === 'moodboard'), key).toHaveLength(1);
+      expect(room.furniture.some((f) => f.kind === 'moodboard'), key).toBe(false);
+      expect(room.wallItems.some((w) => w.kind === 'whiteboard'), key).toBe(true);
+      expect(room.furniture.some((f) => f.kind === 'plant_tall' || f.kind === 'plant_small'), key).toBe(true);
+      for (const f of room.furniture) {
+        const fp = FURNITURE[f.kind].footprint;
+        const inside = f.tx >= room.rect.x + 1 && f.tx + fp.w <= room.rect.x + 15 && f.ty >= room.rect.y + 2 && f.ty + fp.h <= room.rect.y + 11;
+        expect(inside, `${key}: ${f.id} fora do piso`).toBe(true);
+      }
+      expect(hiddenWallItems(room), key).toEqual([]);
+      expect(wallOverlaps(room, 'moodboard'), key).toEqual([]);
+    }
+  });
+
+  it('o residente escolhe a mesa de rank 0 e ela é alcançável a partir da porta', () => {
+    for (const r of rooms) {
+      const room = studio(r.slot, r.seed);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      const chosen = chooseSeat(room.spots, () => true, 'main');
+      expect(chosen?.kind, key).toBe('desk');
+      expect(chosen?.rank, key).toBe(0);
+      expect(room.furniture.some((f) => f.id === chosen!.deskId), key).toBe(true);
+      const b = assembleBuilding(columnsFor([r.slot]), [room]);
+      const reach = b.grid.reachableFrom(room.door!.x, room.door!.y);
+      expect(reach[chosen!.ty * b.grid.w + chosen!.tx], key).toBe(1);
+      expect(b.grid.walkable(chosen!.tx, chosen!.ty), key).toBe(true);
     }
   });
 });

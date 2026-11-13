@@ -2,7 +2,7 @@
 // lixeira, plantas, divisórias de vidro, mesa de reunião, banqueta, luminária e bebedouro.
 // Coordenadas de desenho = footprint (0,0 no canto superior esquerdo; base em y = h*TILE).
 import { mix, ramp, shade, type Ramp } from '../core/color';
-import { floorSheet, rectAt, type BufFurniture, type BufSprite } from '../core/sprite';
+import { floorSheet, rectAt, wallSheet, type BufFurniture, type BufSprite } from '../core/sprite';
 import type { PixelBuf } from '../core/pixbuf';
 import {
   ACCENTS, M, bigLeaf, book, contact, foliage, frontFace, keyboard, leafBlade, monitorBack, monitorFront, mouse, mug,
@@ -506,6 +506,145 @@ export function monitorWall(seed: number): BufFurniture {
   b.rect(20, -9, 8, 1, WHITE);
   b.outline();
   contact(b, 4, 12, 40, 4, 0.22);
+  return { base: s };
+}
+
+// Cores da marca MTC (skill mtc-presentation-theme) usadas nos móveis do estúdio do Designer.
+const MTC_NAVY = '#0a1f54';
+const MTC_PANEL = '#1e2c5d';
+const MTC_DEEP = '#041d56';
+const MTC_GREEN = '#35a83f';
+const MTC_SOFT = '#4e8e5c';
+const MTC_MIST = '#a9aec4';
+const MTC_AMBER = '#fec00b';
+const MTC_WHITE = '#ffffff';
+
+/**
+ * Prancheta de desenho (2x1, estúdio do Designer, MTC): tampo inclinado (a borda de trás mais alta
+ * e mais estreita, com a lateral do tampo à mostra) sobre dois cavaletes em X navy. Em cima, uma
+ * folha de blueprint navy com grade, fachada em traço branco e cotas/marcas verdes, a régua T
+ * branca atravessando a folha, o aparador com um lápis âmbar (único destaque) e uma luminária
+ * articulada de cúpula verde. Só cores da marca.
+ */
+export function draftingBoard(): BufFurniture {
+  const s = floorSheet(2, 1, 24);
+  const b = s.buf;
+  const frame = ramp(MTC_PANEL, 0.07);
+  const edge = ramp(MTC_MIST, 0.06);
+  // Cavaletes em X (dois de cada lado) com a travessa entre eles.
+  for (const x0 of [2, 22]) {
+    b.line(x0, 2, x0 + 7, 14, frame.base);
+    b.line(x0 + 7, 2, x0, 14, frame.lt);
+    b.hline(x0 - 1, x0 + 1, 14, frame.dk);
+    b.hline(x0 + 6, x0 + 8, 14, frame.dk);
+  }
+  b.rect(9, 7, 14, 1, frame.dk);
+  // Tampo inclinado: a borda de trás (norte) é mais estreita e fica mais alta; as laterais
+  // mostram a espessura do tampo em Mist escuro.
+  const top = -15;
+  const bot = 0;
+  for (let y = top; y <= bot; y++) {
+    const inset = Math.round(((bot - y) / (bot - top)) * 3);
+    b.hline(inset, 31 - inset, y, edge.lt);
+    b.set(inset, y, edge.dk);
+    b.set(31 - inset, y, edge.dd);
+  }
+  b.hline(3, 28, top, edge.hi);
+  b.rect(0, bot + 1, 32, 2, edge.dk);
+  b.hline(0, 31, bot + 1, edge.base);
+  // Folha de blueprint navy com grade (linhas do painel) e cantos com fita branca.
+  const sx = 5;
+  const sy = -13;
+  const sw = 22;
+  const sh = 12;
+  b.rect(sx, sy, sw, sh, MTC_NAVY);
+  for (let y = sy + 3; y < sy + sh; y += 4) b.hline(sx, sx + sw - 1, y, MTC_PANEL);
+  for (let x = sx + 3; x < sx + sw; x += 4) b.vline(x, sy, sy + sh - 1, MTC_PANEL);
+  for (const [x, y] of [[sx, sy], [sx + sw - 1, sy], [sx, sy + sh - 1], [sx + sw - 1, sy + sh - 1]] as const) b.set(x, y, MTC_WHITE);
+  // Fachada em traço branco: telhado em duas águas, paredes e uma janela.
+  b.line(sx + 2, sy + 5, sx + 7, sy + 1, MTC_WHITE);
+  b.line(sx + 7, sy + 1, sx + 12, sy + 5, MTC_WHITE);
+  b.vline(sx + 3, sy + 5, sy + 9, MTC_WHITE);
+  b.vline(sx + 11, sy + 5, sy + 9, MTC_WHITE);
+  b.hline(sx + 3, sx + 11, sy + 9, MTC_WHITE);
+  b.rect(sx + 6, sy + 6, 2, 2, MTC_SOFT);
+  // Cotas e marcas verdes ao lado do desenho.
+  b.vline(sx + 15, sy + 1, sy + 9, MTC_GREEN);
+  b.set(sx + 14, sy + 1, MTC_GREEN);
+  b.set(sx + 14, sy + 9, MTC_GREEN);
+  b.line(sx + 17, sy + 2, sx + 20, sy + 5, MTC_GREEN);
+  b.hline(sx + 17, sx + 20, sy + 8, MTC_SOFT);
+  // Régua T branca atravessando a folha (cabeça na borda esquerda do tampo).
+  b.hline(2, 28, sy + sh - 2, MTC_WHITE);
+  b.hline(3, 28, sy + sh - 1, edge.base);
+  b.rect(1, sy + sh - 4, 2, 5, MTC_WHITE);
+  // Aparador de lápis na frente, com um lápis âmbar.
+  b.hline(1, 30, bot + 3, edge.dd);
+  b.hline(8, 13, bot + 2, MTC_AMBER);
+  b.set(7, bot + 2, MTC_DEEP);
+  // Luminária articulada presa no canto de trás: braço Mist, cúpula verde.
+  b.line(27, top - 1, 24, top - 5, edge.dk);
+  b.line(24, top - 5, 19, top - 3, edge.dk);
+  b.rect(17, top - 3, 4, 2, MTC_GREEN);
+  b.hline(17, 20, top - 3, MTC_SOFT);
+  b.outline();
+  contact(b, 1, 12, 30, 4, 0.2);
+  return { base: s };
+}
+
+/**
+ * Moodboard (item de parede, 2 tiles, estúdio do Designer, MTC): quadro de feltro claro com moldura
+ * navy, amostras de cor da paleta da marca (navy, painel, verde, verde suave, Mist e um chip âmbar)
+ * e dois esboços presos com alfinetes (um wireframe e um anel do logo).
+ */
+export function moodboard(): BufFurniture {
+  const s = wallSheet(2);
+  const b = s.buf;
+  const frame = ramp(MTC_NAVY, 0.07);
+  const felt = ramp(MTC_MIST, 0.07).hi;
+  const x = 2;
+  const y = -27;
+  const w = 28;
+  const h = 19;
+  b.rect(x, y, w, h, frame.base);
+  b.hline(x, x + w - 1, y, frame.hi);
+  b.vline(x, y, y + h - 1, frame.lt);
+  b.vline(x + w - 1, y, y + h - 1, frame.dk);
+  b.hline(x, x + w - 1, y + h - 1, frame.dk);
+  b.rect(x + 1, y + 1, w - 2, h - 2, felt);
+  // Amostras de cor (chip colorido com etiqueta branca embaixo), duas colunas.
+  const chips = [[MTC_NAVY, MTC_GREEN], [MTC_PANEL, MTC_SOFT], [MTC_MIST, MTC_AMBER]] as const;
+  chips.forEach((row, i) => {
+    row.forEach((c, j) => {
+      const cx = x + 2 + j * 5;
+      const cy = y + 2 + i * 5;
+      b.rect(cx, cy, 4, 3, c);
+      b.hline(cx, cx + 3, cy + 3, MTC_WHITE);
+    });
+  });
+  // Esboço 1: wireframe de tela (cabeçalho navy, linhas, botão verde), alfinete verde.
+  const ax = x + 13;
+  const ay = y + 2;
+  b.rect(ax, ay, 8, 9, MTC_WHITE);
+  b.vline(ax + 8, ay + 1, ay + 9, MTC_MIST);
+  b.hline(ax + 1, ax + 8, ay + 9, MTC_MIST);
+  b.rect(ax + 1, ay + 1, 6, 2, MTC_PANEL);
+  b.hline(ax + 1, ax + 6, ay + 4, MTC_NAVY);
+  b.hline(ax + 1, ax + 4, ay + 6, MTC_PANEL);
+  b.rect(ax + 4, ay + 7, 3, 1, MTC_GREEN);
+  b.set(ax + 4, ay, MTC_GREEN);
+  // Esboço 2: anel do logo com traço verde, por cima do primeiro; alfinete âmbar.
+  const bx = x + 19;
+  const by = y + 8;
+  b.rect(bx, by, 7, 9, MTC_WHITE);
+  b.vline(bx + 7, by + 1, by + 8, MTC_MIST);
+  b.ellipse(bx + 3.5, by + 4, 2.6, 2.6, MTC_NAVY);
+  b.ellipse(bx + 3.5, by + 4, 1.4, 1.4, MTC_WHITE);
+  b.hline(bx + 1, bx + 5, by + 7, MTC_GREEN);
+  b.set(bx + 3, by, MTC_AMBER);
+  b.outline();
+  for (let yy = y; yy <= y + h + 1; yy++) b.under(x + w, yy, 'rgba(30,34,52,0.16)');
+  for (let xx = x; xx <= x + w; xx++) b.under(xx, y + h + 1, 'rgba(30,34,52,0.16)');
   return { base: s };
 }
 

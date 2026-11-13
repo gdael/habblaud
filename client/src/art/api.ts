@@ -152,6 +152,7 @@ export type FurnitureKind =
   | 'glass_partition' // 1x1 segmento de divisória de vidro sobre base branca (meia-parede + vidro azulado com reflexo). variants: 'h' (corre leste-oeste) | 'v' (corre norte-sul) | 'end' (ponta/coluna)
   | 'server_rack' // 1x1 rack de servidor alto e escuro com LEDs (sala Servidor/Rede).
   | 'monitor_wall' // 3x1 painel de chão com 3 telas de monitoramento (status verde/âmbar), sala Servidor/Rede (MTC).
+  | 'drafting_board' // 2x1 prancheta inclinada sobre pés, com folha de blueprint navy e traços verdes, estúdio do Designer (MTC).
   | 'binder_shelf' // 1x1 estante alta e estreita com pastas coloridas (azul/laranja/verde) e caixas.
   | 'meeting_table' // 3x2 mesa de reunião/bancada para subagentes.
   | 'stool' // 1x1 assento simples (banqueta). Personagem pode sentar em qualquer direção.
@@ -170,6 +171,7 @@ export type FurnitureKind =
   | 'sign' // 3 tiles. Placa com o nome da sala; rects.sign = área do texto (o render escreve o nome).
   | 'mirror' // 1 tile. Espelho (acima das pias do banheiro). (Aditivo) rects.glass = área refletora (o mundo pode desenhar o reflexo de quem está na frente).
   | 'shelf_wall' // 2 tiles. Prateleira de parede com objetos.
+  | 'moodboard' // 2 tiles. Painel de referências: amostras de cor da paleta MTC e esboços presos com alfinetes, estúdio do Designer (MTC).
   // --- copa / café
   | 'counter' // 1x1 segmento de bancada (encostado na parede norte). variants: 'plain' | 'drawers'
   | 'counter_sink' // 1x1 bancada com pia.
@@ -232,6 +234,7 @@ export const FURNITURE: Readonly<Record<FurnitureKind, FurnitureDef>> = {
   glass_partition: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, variants: ['h', 'v', 'end'] },
   server_rack: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   monitor_wall: { mount: 'floor', footprint: { w: 3, h: 1 }, blocks: true },
+  drafting_board: { mount: 'floor', footprint: { w: 2, h: 1 }, blocks: true },
   binder_shelf: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   meeting_table: { mount: 'floor', footprint: { w: 3, h: 2 }, blocks: true },
   stool: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: false, seat: true },
@@ -249,6 +252,7 @@ export const FURNITURE: Readonly<Record<FurnitureKind, FurnitureDef>> = {
   sign: { mount: 'wall', footprint: { w: 3, h: 0 }, blocks: false },
   mirror: { mount: 'wall', footprint: { w: 1, h: 0 }, blocks: false },
   shelf_wall: { mount: 'wall', footprint: { w: 2, h: 0 }, blocks: false },
+  moodboard: { mount: 'wall', footprint: { w: 2, h: 0 }, blocks: false },
   counter: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, variants: ['plain', 'drawers'] },
   counter_sink: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true },
   coffee_machine: { mount: 'floor', footprint: { w: 1, h: 1 }, blocks: true, states: 2 },

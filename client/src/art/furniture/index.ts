@@ -60,6 +60,10 @@ function build(kind: FurnitureKind, variant: string | undefined, state: number, 
       return O.serverRack(seed);
     case 'monitor_wall':
       return O.monitorWall(seed);
+    case 'drafting_board':
+      return O.draftingBoard();
+    case 'moodboard':
+      return O.moodboard();
     case 'binder_shelf':
       return O.binderShelf(seed);
     case 'meeting_table':

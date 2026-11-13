@@ -65,9 +65,31 @@ export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
     case 'lead':
       placeLeadInterior(c);
       return true;
+    case 'studio':
+      placeStudioInterior(c);
+      return true;
     default:
       return false;
   }
+}
+
+/**
+ * Apoio na parede norte das salas temáticas (sem cobrir quadro, placa ou janela): estante na coluna
+ * `shelfX` com o ponto da estante, planta alta no canto leste e, conforme o lado, o ponto da janela
+ * ou um vaso pequeno no canto oeste. Mesma ordem de sorteio do bloco equivalente do interior
+ * padrão (que mantém a sua própria cópia, para a ordem do rng das salas comuns nunca mudar).
+ * `shelf: false` deixa a parede livre na coluna da estante (o ponto continua, diante da parede).
+ * Devolve `shelfX`.
+ */
+function placeNorthSupport(c: InteriorCtx, o: { shelf?: boolean } = {}): number {
+  const { furn, spot, pick, north } = c;
+  const shelfX = north ? 1 : 4;
+  if (o.shelf !== false) furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
+  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
+  furn('plant_tall', 14, 2, pick(PLANTS_TALL), { order: 0.2 });
+  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
+  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+  return shelfX;
 }
 
 /** Interior padrão das salas de projeto. */
@@ -206,7 +228,7 @@ export function placeStockInterior(c: InteriorCtx): void {
  * reunião; quem visita fica nos pontos em pé (diante dos racks e no corredor).
  */
 function placeServerInterior(c: InteriorCtx): void {
-  const { furn, seat, spot, pick, theme, north } = c;
+  const { furn, seat, spot, pick, theme } = c;
 
   // ---- posto de monitoramento: parede de monitores (3x1) e, à frente, a mesa do operador
   // (a pessoa senta de costas para a câmera, olhando para as telas). O painel é deslocado meio
@@ -225,12 +247,7 @@ function placeServerInterior(c: InteriorCtx): void {
   furn('floor_lamp', 14, 8, undefined, { order: 0.36 });
 
   // ---- apoio na parede norte (sem cobrir quadro, placa ou janela), como no interior padrão
-  const shelfX = north ? 1 : 4;
-  furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
-  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
-  furn('plant_tall', 14, 2, pick(PLANTS_TALL), { order: 0.2 });
-  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
-  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+  placeNorthSupport(c);
 
   // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre):
   // arquivo e pastas à esquerda, mais dois racks à direita
@@ -254,7 +271,7 @@ function placeServerInterior(c: InteriorCtx): void {
  * banquetas para os subagentes visitantes. Pontos em pé extras para quem não achar lugar.
  */
 function placeLeadInterior(c: InteriorCtx): void {
-  const { furn, seat, spot, rug, pick, theme, north, seed } = c;
+  const { furn, seat, spot, rug, pick, theme, seed } = c;
 
   // ---- estação do líder: tapete grande, três mesas (frente) com as mesas de trás como bancada
   rug(1.2, 3.6, 7.6, 5, shade(theme.carpet2, 0.2), seed + 4);
@@ -275,12 +292,7 @@ function placeLeadInterior(c: InteriorCtx): void {
   seat('stool', 'stool', 12, 7, 'up', undefined, { order: 0.68 });
 
   // ---- estante na parede norte (sem cobrir quadro, placa ou janela) e plantas
-  const shelfX = north ? 1 : 4;
-  furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
-  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
-  furn('plant_tall', 14, 2, pick(PLANTS_TALL), { order: 0.2 });
-  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
-  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+  placeNorthSupport(c);
   furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
   furn('floor_lamp', 14, 5, undefined, { order: 0.31 });
   furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
@@ -298,4 +310,59 @@ function placeLeadInterior(c: InteriorCtx): void {
   spot('stand', 1, 8, 'right');
   spot('stand', 12, 9, 'up', { dy: -2 });
   spot('stand', 13, 9, 'up', { dy: -2 });
+}
+
+/**
+ * Estúdio (Designer): a mesa do Designer (rank 0) e uma segunda mesa ao lado, uma prancheta atrás
+ * delas e mais duas pranchetas sobre um tapete na cor do tema no lado leste, uma mesinha com duas
+ * banquetas para revisar esboços, o moodboard na parede norte (no lugar da estante, que desce
+ * para a parede de baixo) e plantas. O quadro branco é o da casca da sala.
+ */
+function placeStudioInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, wallItem, rug, pick, theme, seed } = c;
+
+  // ---- mesas: a do Designer (rank 0) e uma segunda (rank 1), de costas para a câmera
+  for (let i = 0; i < 2; i++) {
+    const lx = 2 + i * 2;
+    const desk = furn('desk', lx, 6, theme.deskVariant, { order: 0.4 + i * 0.05, seat: `S${i}` });
+    seat('desk', 'office_chair', lx, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: i, side: 'S', order: 0.6 + i * 0.03 });
+  }
+  furn('trash_bin', 6, 6, undefined, { order: 0.42 });
+  furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.41 });
+
+  // ---- pranchetas: uma atrás das mesas, duas no lado leste sobre um tapete do tema; quem desenha
+  // fica em pé ao sul de cada uma, virado para ela
+  furn('drafting_board', 2, 4, undefined, { order: 0.3 });
+  spot('stand', 2, 5, 'up', { dx: TILE / 2, dy: -2 });
+  rug(9.6, 3.6, 4.8, 4.8, shade(theme.carpet2, 0.25), seed + 4);
+  furn('drafting_board', 10, 4, undefined, { order: 0.31 });
+  furn('drafting_board', 12, 4, undefined, { order: 0.32 });
+  spot('stand', 10, 5, 'up', { dx: TILE / 2, dy: -2 });
+  spot('stand', 12, 5, 'up', { dx: TILE / 2, dy: -2 });
+
+  // ---- mesinha de revisão com duas banquetas (visitas e conversa sobre os esboços)
+  furn('cafe_table', 11, 7, undefined, { order: 0.45 });
+  seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.65 });
+  seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.66 });
+
+  // ---- parede norte: moodboard onde ficaria a estante (sem cobrir quadro, placa ou janela)
+  const shelfX = placeNorthSupport(c, { shelf: false });
+  wallItem('moodboard', shelfX + 1, undefined, { order: 0.55 });
+  furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
+  furn('floor_lamp', 14, 6, undefined, { order: 0.33 });
+  furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre): a estante
+  // encostada embaixo, plantas e um canto com dois puffs nas cores da marca
+  furn('bookshelf', 1, 10, undefined, { order: 0.2 });
+  furn('plant_tall', 3, 10, pick(PLANTS_TALL), { order: 0.21 });
+  furn('filing_cabinet', 4, 10, undefined, { order: 0.22 });
+  furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
+  seat('nook', 'beanbag', 12, 10, 'up', 'green', { order: 0.66 });
+  seat('nook', 'beanbag', 13, 10, 'up', 'blue', { order: 0.67 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.27 });
+
+  // pontos em pé para quem visita
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 8, 'right');
 }
