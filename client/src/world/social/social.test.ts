@@ -5,7 +5,7 @@ import type { AgentInfo, OfficeSnapshot, RoomInfo } from '../../../../shared/typ
 import type { Appearance, ArtModule, RoomTheme } from '../../art/api';
 import { DEFAULT_WORLD_OPTIONS } from '../api';
 import { Sim } from '../sim/sim';
-import { active, KINDS } from './gathering';
+import { active, KINDS, type Gathering } from './gathering';
 import { CALLED } from './lines';
 import { SHELL_SOCIAL_MIN_MS } from './social';
 import { START_COINS, TASK_REWARD, TURN_REWARD } from './wallet';
@@ -102,6 +102,23 @@ describe('vida social', () => {
     expect(grouped).toBe(true);
     const g = [...sim.social.gatherings].find((x) => x.phase === 'run')!;
     for (const m of active(g)) expect(sim.chars.get(m.id)!.gathering).toBe(g);
+  });
+
+  it('MTC: a re-keyed resident leaves its gathering (no member keeps the old id)', () => {
+    const sim = newSim();
+    const clock = { now: T0 };
+    const hir = (id: string) => agent(id, '/a', 'idle', { name: 'Hiraya', resident: true });
+    sim.applySnapshot(snap(ROOMS, [hir('resident:hiraya'), agent('caio', '/b', 'idle')]), clock.now);
+    let g: Gathering | undefined;
+    run(sim, clock, 240, () => !!(g = [...sim.social.gatherings].find((x) => x.phase !== 'ended' && active(x).some((m) => m.id === 'resident:hiraya'))));
+    expect(g).toBeDefined();
+    sim.applySnapshot(snap(ROOMS, [hir('acc:7'), agent('caio', '/b', 'idle')], 2), clock.now);
+    const ch = sim.chars.get('acc:7')!;
+    expect(ch.gathering).toBeNull();
+    for (const x of sim.social.gatherings) {
+      expect(active(x).some((m) => m.id === 'resident:hiraya')).toBe(false);
+      expect(x.pending.some((p) => p.id === 'resident:hiraya')).toBe(false);
+    }
   });
 
   it('sozinho no escritório, ninguém começa uma roda de grupo (só o espelho, que vale sozinho)', () => {

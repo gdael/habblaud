@@ -230,6 +230,7 @@ export class Sim {
         this.social.syncAgent(nc, a, now, false);
       }
     }
+    this.dropReplacedResidents(seen);
     for (const ch of this.chars.values()) {
       if (!seen.has(ch.id) && !ch.leaving && ch.missingSince === null) ch.missingSince = now;
     }
@@ -260,6 +261,8 @@ export class Sim {
       if (!ch.info.resident || ch.leaving || ch.gone || ids.has(ch.id)) continue;
       if (ch.info.roomId !== a.roomId || ch.info.name !== a.name) continue;
       const old = ch.id;
+      // leave any gathering/plan under the old id (members, pending lines and temp spots key on it)
+      this.clearPlan(ch);
       for (const s of this.spots.reservedBy(old)) {
         this.spots.release(s, old);
         this.spots.reserve(s, a.id);
@@ -273,6 +276,27 @@ export class Sim {
       return ch;
     }
     return undefined;
+  }
+
+  /**
+   * MTC: a resident that left the snapshot while another character there now shows the same resident (same room and
+   * name: Hiraya moved from a closed session to another live one) goes away at once, without the elevator ride, so the
+   * office never shows two of it. The UI moves its selection to the one that stays (takeRekeyed).
+   */
+  private dropReplacedResidents(seen: Set<string>): void {
+    for (const ch of [...this.chars.values()]) {
+      if (seen.has(ch.id) || !ch.info.resident || ch.leaving || ch.gone) continue;
+      const twin = [...this.chars.values()].find(
+        (c) => c !== ch && seen.has(c.id) && c.info.resident && c.info.roomId === ch.info.roomId && c.info.name === ch.info.name,
+      );
+      if (!twin) continue;
+      const old = ch.id;
+      this.clearPlan(ch);
+      this.spots.releaseAll(old);
+      this.chars.delete(old);
+      for (const [k, v] of this.rekeyed) if (v === old) this.rekeyed.set(k, twin.id);
+      this.rekeyed.set(old, twin.id);
+    }
   }
 
   /** MTC: residents re-keyed since the last call (old id -> new id); empties the list. */

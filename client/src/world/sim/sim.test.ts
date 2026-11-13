@@ -794,6 +794,28 @@ describe('MTC residents', () => {
     expect(sim.chars.size).toBe(1);
   });
 
+  it('adoption moves to another live main: the old Hiraya leaves at once, no twin, no elevator', () => {
+    const sim = newSim();
+    const clock = { now: T0 };
+    const rooms = [room('/v2', 0)];
+    const hir = (id: string) => agent(id, '/v2', 'working', { name: 'Hiraya', resident: true, seed: 42 });
+    sim.applySnapshot(snap(rooms, [hir('acc:1'), agent('acc:2', '/v2', 'working', { name: 'Bruno' })]), clock.now);
+    run(sim, clock, 0.5);
+    const old = sim.chars.get('acc:1')!;
+    const oldHome = old.homeSpot;
+    // acc:1 closed (hidden by the server) and acc:2 is Hiraya now, in the same snapshot
+    sim.applySnapshot(snap(rooms, [hir('acc:2')], 2), clock.now);
+    expect(sim.chars.has('acc:1')).toBe(false);
+    expect([...sim.chars.values()].filter((c) => c.info.name === 'Hiraya').map((c) => c.id)).toEqual(['acc:2']);
+    expect(old.leaving).toBe(false);
+    expect(old.queue.some((s) => s.t === 'elevOut' || s.t === 'elevIn') || old.step !== null).toBe(false);
+    expect(oldHome && sim.spots.ownerOf(oldHome)).not.toBe('acc:1');
+    // the UI moves its selection to the Hiraya that stays
+    expect(sim.takeRekeyed()).toEqual(new Map([['acc:1', 'acc:2']]));
+    run(sim, clock, 5);
+    expect(sim.chars.size).toBe(1);
+  });
+
   it('a non-resident agent with a new id still arrives as stock', () => {
     const sim = newSim();
     const clock = { now: T0 };
