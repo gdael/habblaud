@@ -10,6 +10,7 @@ import { PixelBuf } from './core/pixbuf';
 import type { BufSprite } from './core/sprite';
 import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
+import { monitorWall } from './furniture/office';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
 import { CHUNK_PX, floorChunk } from './surfaces/floor';
 import { southWallTile, wallFaceTile } from './surfaces/walls';
@@ -478,6 +479,22 @@ describe('móveis', () => {
     expect(renderFurniture('sofa', 'up').front).toBeDefined();
     expect(renderFurniture('toilet_stall', undefined, 1).front).toBeDefined();
     expect(renderFurniture('office_chair_front').front).toBeUndefined();
+  });
+
+  it('monitor_wall: folha do tamanho do footprint declarado, com pixels e telas escuras com status verde/âmbar', () => {
+    const fp = FURNITURE.monitor_wall.footprint;
+    for (let seed = 0; seed < 6; seed++) {
+      const s = monitorWall(seed).base;
+      // a folha de chão = footprint + margens laterais (ox) e a âncora no centro inferior do footprint
+      expect(s.buf.w - 2 * s.buf.ox, `seed ${seed}`).toBe(fp.w * TILE);
+      expect(s.ax).toBe(s.buf.ox + (fp.w * TILE) / 2);
+      expect(s.ay).toBe(s.buf.oy + fp.h * TILE);
+      expect(s.buf.countOpaque(), `seed ${seed}`).toBeGreaterThan(200);
+    }
+    const s = monitorWall(1).base;
+    expect(countColor(s.buf, '#35A83F') + countColor(s.buf, '#4E8E5C')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#FEC00B')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#0A1F54')).toBeGreaterThan(0);
   });
 
   it('normaliza variantes, estados e sementes', () => {

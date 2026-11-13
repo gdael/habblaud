@@ -60,16 +60,15 @@ export interface InteriorCtx {
 export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
   switch (kind) {
     case 'server':
-      // por enquanto: o interior padrão com racks no lugar da coluna de apoio (como o antigo serverRoom)
-      placeStockInterior(c, { server: true });
+      placeServerInterior(c);
       return true;
     default:
       return false;
   }
 }
 
-/** Interior padrão das salas de projeto. `server` troca a coluna de apoio por racks (sem sortear a coluna). */
-export function placeStockInterior(c: InteriorCtx, opts: { server?: boolean } = {}): void {
+/** Interior padrão das salas de projeto. */
+export function placeStockInterior(c: InteriorCtx): void {
   const { furn, seat, spot, rug, pick, rng, theme, north } = c;
   const v = c.rv;
   const seed = c.seed;
@@ -122,14 +121,8 @@ export function placeStockInterior(c: InteriorCtx, opts: { server?: boolean } = 
   furn('plant_tall', 14, 2, tall, { order: 0.2 });
   if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
   else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
-  const isServer = opts.server === true;
-  const column = isServer ? -1 : Math.floor(rng() * 3);
-  if (isServer) {
-    furn('server_rack', 14, 4, undefined, { order: 0.3 });
-    furn('server_rack', 14, 5, undefined, { order: 0.31 });
-    furn('server_rack', 14, 6, undefined, { order: 0.32 });
-    furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
-  } else if (column === 0) {
+  const column = Math.floor(rng() * 3);
+  if (column === 0) {
     furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
     furn('printer', 14, 6, undefined, { order: 0.32 });
     furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
@@ -202,4 +195,52 @@ export function placeStockInterior(c: InteriorCtx, opts: { server?: boolean } = 
   spot('stand', 9, 3, 'left');
   spot('stand', 1, 7, 'right');
   spot('stand', 13, 9, 'up', { dy: -2 });
+}
+
+/**
+ * Sala Servidor/Rede (Makisig): racks junto à parede leste e uma fileira de racks no fundo, a
+ * parede de monitores no lugar da ilha e uma única mesa de operador virada para ela. Sem canto de
+ * reunião; quem visita fica nos pontos em pé (diante dos racks e no corredor).
+ */
+function placeServerInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, pick, theme, north } = c;
+
+  // ---- posto de monitoramento: parede de monitores (3x1) e, à frente, a mesa do operador
+  // (a pessoa senta de costas para a câmera, olhando para as telas). O painel é deslocado meio
+  // tile para ficar centrado sobre a mesa (colunas 2–3). Fica na linha 5 para não cobrir o que está
+  // encostado na parede norte (estante, planta).
+  furn('monitor_wall', 2, 5, undefined, { dx: -TILE / 2, order: 0.3 });
+  const desk = furn('desk', 2, 7, theme.deskVariant, { order: 0.4, seat: 'S0' });
+  seat('desk', 'office_chair', 2, 8, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: 0, side: 'S', order: 0.6 });
+  furn('trash_bin', 4, 7, undefined, { order: 0.42 });
+
+  // ---- racks: fileira no fundo (colunas 10–12) e a coluna junto à parede leste, como antes
+  for (let i = 0; i < 3; i++) furn('server_rack', 10 + i, 4, undefined, { order: 0.3 + i * 0.01 });
+  furn('server_rack', 14, 4, undefined, { order: 0.33 });
+  furn('server_rack', 14, 5, undefined, { order: 0.34 });
+  furn('server_rack', 14, 6, undefined, { order: 0.35 });
+  furn('floor_lamp', 14, 8, undefined, { order: 0.36 });
+
+  // ---- apoio na parede norte (sem cobrir quadro, placa ou janela), como no interior padrão
+  const shelfX = north ? 1 : 4;
+  furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
+  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
+  furn('plant_tall', 14, 2, pick(PLANTS_TALL), { order: 0.2 });
+  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
+  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre):
+  // arquivo e pastas à esquerda, mais dois racks à direita
+  furn('plant_tall', 1, 10, pick(PLANTS_TALL), { order: 0.2 });
+  furn('filing_cabinet', 2, 10, undefined, { order: 0.21 });
+  furn('binder_shelf', 3, 10, undefined, { order: 0.22 });
+  furn('printer', 4, 10, undefined, { order: 0.23 });
+  furn('server_rack', 12, 10, undefined, { order: 0.25 });
+  furn('server_rack', 13, 10, undefined, { order: 0.26 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.27 });
+
+  // pontos em pé: diante da fileira de racks, diante dos racks de baixo e no corredor
+  spot('stand', 11, 5, 'up', { dy: -2 });
+  spot('stand', 13, 9, 'up', { dy: -2 });
+  spot('stand', 9, 3, 'left');
 }

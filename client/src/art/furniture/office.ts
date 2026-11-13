@@ -427,6 +427,88 @@ export function serverRack(seed: number): BufFurniture {
   return { base: s };
 }
 
+/**
+ * Parede de monitores (3x1, sala Servidor/Rede, MTC): três telas escuras num painel azul-marinho
+ * sobre dois pés, com linhas de status verdes e um alerta âmbar. Só cores da marca (navy, verde,
+ * verde suave, branco; âmbar apenas no destaque).
+ */
+export function monitorWall(seed: number): BufFurniture {
+  const s = floorSheet(3, 1, 30);
+  const b = s.buf;
+  const r = rngOf(seed, 59);
+  const NAVY = '#0a1f54';
+  const PANEL = '#1e2c5d';
+  const GREEN = '#35a83f';
+  const SOFT = '#4e8e5c';
+  const AMBER = '#fec00b';
+  const WHITE = '#ffffff';
+  const frame = ramp(NAVY, 0.07);
+  const screen = shade(NAVY, -0.45);
+  // Pés com sapatas (o painel fica de pé no chão, de frente para a câmera).
+  for (const x of [9, 37]) {
+    b.rect(x, -6, 2, 19, frame.base);
+    b.vline(x, -6, 12, frame.lt);
+    b.rect(x - 3, 12, 8, 2, frame.dk);
+    b.hline(x - 3, x + 4, 12, frame.lt);
+  }
+  // Painel: moldura navy com borda clara no topo e escura embaixo.
+  topFace(b, 0, -29, 48, 2, frame);
+  b.rect(0, -27, 48, 21, PANEL);
+  b.hline(0, 47, -7, frame.dd);
+  b.vline(0, -27, -7, frame.lt);
+  b.vline(47, -27, -7, frame.dd);
+  // Três telas escuras.
+  const xs = [2, 17, 32];
+  const top = -25;
+  const h = 15;
+  xs.forEach((x) => {
+    b.rect(x, top, 14, h, screen);
+    b.hline(x, x + 13, top, NAVY);
+    b.set(x + 1, top + 1, frame.hi);
+  });
+  // Tela 1: barras de tráfego (verde), uma em âmbar.
+  {
+    const x0 = xs[0] + 2;
+    const amberBar = Math.floor(r() * 5);
+    for (let i = 0; i < 5; i++) {
+      const bh = 3 + Math.floor(r() * 8);
+      b.rect(x0 + i * 2, top + h - 2 - bh, 1, bh, i === amberBar ? AMBER : i % 2 ? SOFT : GREEN);
+    }
+    b.hline(xs[0] + 1, xs[0] + 12, top + h - 2, SOFT);
+  }
+  // Tela 2: linha de latência (verde) sobre grade suave, com um pico marcado em âmbar.
+  {
+    const x0 = xs[1] + 1;
+    for (const gy of [top + 4, top + 8, top + 12]) for (let x = x0; x < x0 + 12; x += 2) b.set(x, gy, PANEL);
+    let y = top + 9;
+    let peak = { x: x0, y };
+    for (let i = 0; i < 12; i++) {
+      y = Math.max(top + 3, Math.min(top + 12, y + Math.floor(r() * 5) - 2));
+      b.set(x0 + i, y, GREEN);
+      if (y < peak.y) peak = { x: x0 + i, y };
+    }
+    b.set(peak.x, peak.y - 1, AMBER);
+    b.set(peak.x, peak.y - 2, AMBER);
+  }
+  // Tela 3: lista de status (ponto + linha); um item em alerta âmbar.
+  {
+    const x0 = xs[2] + 2;
+    const alert = 1 + Math.floor(r() * 3);
+    for (let i = 0; i < 4; i++) {
+      const y = top + 2 + i * 3;
+      b.set(x0, y, i === alert ? AMBER : GREEN);
+      const len = 4 + Math.floor(r() * 6);
+      b.hline(x0 + 2, x0 + 1 + len, y, i === 0 ? WHITE : SOFT);
+    }
+  }
+  // LED de energia e etiqueta branca no rodapé do painel.
+  b.set(44, -9, GREEN);
+  b.rect(20, -9, 8, 1, WHITE);
+  b.outline();
+  contact(b, 4, 12, 40, 4, 0.22);
+  return { base: s };
+}
+
 export function filingCabinet(): BufFurniture {
   const s = floorSheet(1, 1, 8);
   const b = s.buf;

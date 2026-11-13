@@ -132,7 +132,8 @@ export function layoutProjectRoom(room: RoomInput, theme: RoomTheme): AreaLayout
 
   // ---- interior: tema da variante (salas dos residentes) ou o interior padrão
   const ctx: InteriorCtx = { furn, seat, spot, wallItem, rug, pick, rng, theme, north, mirror: mir, seed: room.seed, rv: v };
-  const kind: RoomKind | undefined = room.variant ?? (room.serverRoom === true ? 'server' : undefined);
+  // o antigo serverRoom (regra pelo nome Server/Rede) tem precedência sobre a variante
+  const kind: RoomKind | undefined = room.serverRoom === true ? 'server' : room.variant;
   if (!kind || !placeInterior(kind, ctx)) placeStockInterior(ctx);
 
   // ---- sombreamento quando a luz está apagada (salas ao norte: a mureta sul fica clara)

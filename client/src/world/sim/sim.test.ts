@@ -833,7 +833,8 @@ describe('MTC residents', () => {
     const plain: RoomInfo = { ...room('/p', 1), name: 'p' };
     sim.applySnapshot(snap([r, plain], []), T0);
     const racks = (id: string) => sim.rooms.get(id)!.layout.furniture.filter((f) => f.kind === 'server_rack').length;
-    expect(racks('resident:other')).toBe(3);
+    expect(racks('resident:other')).toBeGreaterThanOrEqual(3);
+    expect(sim.rooms.get('resident:other')!.layout.furniture.filter((f) => f.kind === 'monitor_wall')).toHaveLength(1);
     expect(racks('/p')).toBe(0);
   });
 

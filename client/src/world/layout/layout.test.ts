@@ -10,6 +10,7 @@ import roomFixture from './room-layout.fixture.json';
 import { layoutExterior, slotShell } from './exterior';
 import { RECEPTION_ID } from './core';
 import type { AreaLayout } from './types';
+import { assertRoomInvariants } from './layout-test-support';
 
 const theme: RoomTheme = {
   carpet: '#4f6d8f',
@@ -240,33 +241,6 @@ describe('itens de parede', () => {
   });
 });
 
-/**
- * Invariantes de qualquer sala de projeto (padrão ou temática): ao menos uma mesa, todo spot
- * alcançável a partir da porta (BFS no grid de caminhada), footprints de móveis sem sobreposição
- * e tiles da porta caminháveis. Usado pelos testes das variantes (salas dos residentes).
- */
-export function assertRoomInvariants(layout: AreaLayout): void {
-  expect(layout.spots.some((s) => s.kind === 'desk'), `${layout.id}: sem mesa`).toBe(true);
-  const used = new Map<string, string>();
-  for (const f of layout.furniture) {
-    const def = FURNITURE[f.kind];
-    for (let y = f.ty; y < f.ty + def.footprint.h; y++)
-      for (let x = f.tx; x < f.tx + def.footprint.w; x++) {
-        const key = `${x},${y}`;
-        expect(used.get(key), `${layout.id}: ${f.id} sobre ${used.get(key)}`).toBeUndefined();
-        used.set(key, f.id);
-      }
-  }
-  const slot = slotAt(layout.rect.x / COL_W, layout.side ?? 'north');
-  const b = assembleBuilding(columnsFor([slot]), [layout]);
-  const door = layout.door!;
-  expect(door, `${layout.id}: sem porta`).toBeDefined();
-  for (let y = door.y; y < door.y + door.h; y++)
-    for (let x = door.x; x < door.x + door.w; x++) expect(b.grid.walkable(x, y), `${layout.id}: porta ${x},${y} bloqueada`).toBe(true);
-  const reach = b.grid.reachableFrom(door.x, door.y);
-  for (const sp of layout.spots) expect(reach[sp.ty * b.grid.w + sp.tx], `${layout.id}: ${sp.id} inalcançável`).toBe(1);
-}
-
 /** Salas da fixture: chave `slot:semente` (12 salas padrão, slots 0/1, espelhadas ou não). */
 const FIXTURE = roomFixture as unknown as { stock: Record<string, AreaLayout>; server: Record<string, AreaLayout> };
 const fixtureRooms = (rec: Record<string, AreaLayout>) =>
@@ -333,5 +307,38 @@ describe('variantes das salas: despacho do interior', () => {
     expect(calls).toEqual([]);
     expect(placeInterior('server', ctx)).toBe(true);
     expect(calls.length).toBeGreaterThan(0);
+  });
+});
+
+describe("sala servidor (variante 'server'): parede de monitores", () => {
+  const rooms = fixtureRooms(FIXTURE.stock);
+  const serverLayout = (slot: number, seed: number) => layoutProjectRoom({ id: `/srv/${seed}`, slot, seed, variant: 'server' }, theme);
+
+  it('12 sementes cobrem os dois lados e os dois espelhamentos', () => {
+    expect(new Set(rooms.map((r) => `${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`))).toEqual(new Set(['north/false', 'north/true', 'south/false', 'south/true']));
+  });
+
+  it('invariantes, 1 mesa, racks e 1 parede de monitores (12 sementes x lados x espelhamento)', () => {
+    for (const r of rooms) {
+      const room = serverLayout(r.slot, r.seed);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      assertRoomInvariants(room);
+      expect(room.spots.filter((s) => s.kind === 'desk'), key).toHaveLength(1);
+      expect(room.furniture.filter((f) => f.kind === 'server_rack').length, key).toBeGreaterThanOrEqual(3);
+      expect(room.furniture.filter((f) => f.kind === 'monitor_wall'), key).toHaveLength(1);
+      // tudo dentro do piso, nada escondendo quadro/placa/janela
+      for (const f of room.furniture) {
+        const fp = FURNITURE[f.kind].footprint;
+        const inside = f.tx >= room.rect.x + 1 && f.tx + fp.w <= room.rect.x + 15 && f.ty >= room.rect.y + 2 && f.ty + fp.h <= room.rect.y + 11;
+        expect(inside, `${key}: ${f.id} fora do piso`).toBe(true);
+      }
+      expect(hiddenWallItems(room), key).toEqual([]);
+    }
+  });
+
+  it('o antigo serverRoom tem precedência sobre a variante', () => {
+    const a = JSON.stringify(layoutProjectRoom({ id: '/p', slot: 0, seed: 13, serverRoom: true, variant: 'studio' }, theme));
+    const b = JSON.stringify(layoutProjectRoom({ id: '/p', slot: 0, seed: 13, variant: 'server' }, theme));
+    expect(a).toBe(b);
   });
 });
