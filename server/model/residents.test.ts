@@ -19,6 +19,14 @@ import {
 
 const SHIPPED = new URL('../../../habblaud-mtc/roster.json', import.meta.url);
 const shipped = () => JSON.parse(readFileSync(SHIPPED, 'utf8'));
+/** Raw entry of the shipped roster by resident id (names and looks change; ids do not). */
+type RawResident = { id: string; name: string; role: string; look: string; appearance?: Record<string, string> };
+const shippedDef = (id: string): RawResident => {
+  const d = (shipped().residents as RawResident[]).find((r) => r.id === id);
+  if (!d) throw new Error(`shipped roster has no resident ${id}`);
+  return d;
+};
+const SHIPPED_IDS = ['hiraya', 'talend-designer', 'talend-developer', 'talend-reviewer', 'talend-qa', 'makisig'];
 const base = { name: 'A', role: 'R', look: 'f', type: 'subagent', agentTypes: [], aliases: [] };
 
 beforeAll(() => setQuiet(true));
@@ -38,7 +46,8 @@ describe('residents', () => {
   });
   it('matches case-insensitively', () => {
     const roster = parseRoster(shipped());
-    expect(matchResident(roster, 'Talend-Developer')?.name).toBe('Developer');
+    expect(matchResident(roster, 'Talend-Developer')?.id).toBe('talend-developer');
+    expect(matchResident(roster, 'Talend-Developer')?.name).toBe(shippedDef('talend-developer').name);
     expect(matchResident(roster, 'HIRAYA')?.id).toBe('hiraya');
     expect(matchResident(roster, 'Explore')).toBeUndefined();
   });
@@ -312,7 +321,8 @@ describe('residents: overlay no Office', () => {
     expect(dev.tasks).toEqual(real.tasks);
     expect(dev.stats).toEqual(real.stats);
     expect(dev.parentId).toBeUndefined();
-    expect(dev.name).toBe('Developer');
+    expect(dev.name).toBe(shippedDef('talend-developer').name);
+    expect(dev.role).toBe(shippedDef('talend-developer').role);
     expect(dev.kind).toBe('main');
     expect(dev.roomId).toBe('resident:talend-developer');
     expect(snap.rooms.find((r) => r.id === 'resident:talend-developer')!.slot).toBe(2);
@@ -365,7 +375,7 @@ describe('residents: overlay no Office', () => {
 
   it('real agents never get a resident name', () => {
     const names = new NameStore(null);
-    const reserved = ['Hiraya', 'Designer', 'Developer', 'Reviewer', 'QA', 'Makisig'];
+    const reserved = SHIPPED_IDS.map((id) => shippedDef(id).name);
     reserved.forEach((n, i) => names.remember(`s${i}`, { name: n, look: 'f' }));
     const { office, now } = makeOffice({ roster: roster(), names });
     reserved.forEach((_, i) => office.addMain(main(`acc:${i}`, `/p/r${i}`, now(), `s${i}`)));
@@ -461,16 +471,17 @@ describe('residents: overlay no Office', () => {
     office.addActivity('s:qa', act('q1', now()), true);
     let r = office.commit();
     const item = r.feed.find((f) => f.id === 'q1')!;
-    expect(item.agentName).toBe('QA');
+    const qa = shippedDef('talend-qa').name;
+    expect(item.agentName).toBe(qa);
     expect(item.agentId).toBe('resident:talend-qa');
     expect(item.roomId).toBe('resident:talend-qa');
-    expect(item.roomName).toBe('QA');
+    expect(item.roomName).toBe(qa);
     expect(r.snapshot.agents.some((a) => a.id === item.agentId)).toBe(true);
     expect(r.snapshot.rooms.some((x) => x.id === item.roomId)).toBe(true);
     office.completeSub('s:qa');
     r = office.commit();
     const deliver = r.notices.find((n) => n.text.includes('📦'))!;
-    expect(deliver.text).toContain('QA');
+    expect(deliver.text).toContain(qa);
     expect(deliver.text).not.toContain(office.get('s:qa')!.name);
     expect(deliver.agentId).toBe('resident:talend-qa');
     expect(deliver.roomId).toBe('resident:talend-qa');
@@ -648,13 +659,35 @@ describe('residents: appearance', () => {
     expect(office.get('acc:1')!.parts).toEqual({ hairStyle: 'bald' });
   });
   it('residents without appearance get no parts', () => {
-    const { office } = makeOffice({ roster: custom() });
+    // Fixture roster: talend-qa really has no appearance (every shipped resident now has one).
+    const defs = custom();
+    expect(defs.find((d) => d.id === 'talend-qa')!.appearance).toBeUndefined();
+    const { office } = makeOffice({ roster: defs });
     expect(office.commit().snapshot.agents.find((a) => a.id === 'resident:talend-qa')!.parts).toBeUndefined();
   });
-  it('shipped roster: Hiraya and Makisig have an appearance, the other four do not', () => {
-    const m = Object.fromEntries(parseRoster(shipped()).map((d) => [d.id, d.appearance]));
-    expect(m.hiraya).toMatchObject({ hairStyle: expect.any(String), accessory: 'headphones' });
-    expect(m.makisig).toMatchObject({ accessory: 'sunglasses' });
-    for (const id of ['talend-designer', 'talend-developer', 'talend-reviewer', 'talend-qa']) expect(m[id]).toBeUndefined();
+  it('shipped roster: every resident keeps its name, role, look and appearance from roster.json', () => {
+    const parsed = new Map(parseRoster(shipped()).map((d) => [d.id, d]));
+    expect([...parsed.keys()].sort()).toEqual([...SHIPPED_IDS].sort());
+    for (const id of SHIPPED_IDS) {
+      const raw = shippedDef(id);
+      const d = parsed.get(id)!;
+      expect(d).toMatchObject({ name: raw.name, role: raw.role, look: raw.look });
+      // No shipped appearance is dropped as invalid.
+      expect(raw.appearance).toBeDefined();
+      expect(d.appearance).toEqual(raw.appearance);
+    }
+    expect(parsed.get('hiraya')!.appearance).toMatchObject({ hairStyle: expect.any(String), accessory: 'headphones' });
+    expect(parsed.get('makisig')!.appearance).toMatchObject({ accessory: 'sunglasses' });
+  });
+  it('shipped roster: each resident (idle) wears its own roster appearance and look', () => {
+    const { office } = makeOffice({ roster: parseRoster(shipped()) });
+    const agents = office.commit().snapshot.agents;
+    for (const id of SHIPPED_IDS) {
+      const raw = shippedDef(id);
+      const a = agents.find((x) => x.id === `resident:${id}`)!;
+      expect(a.name).toBe(raw.name);
+      expect(a.look).toBe(raw.look);
+      expect(a.parts).toEqual(raw.appearance);
+    }
   });
 });
