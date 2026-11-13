@@ -141,6 +141,43 @@ const sub = (id: string, parentId: string, role: string, at: number, title = `t-
   startedAt: at,
 });
 
+describe('residents: room variant', () => {
+  it('parseRoster accepts a valid room', () => {
+    const [d] = parseRoster({ residents: [{ ...base, id: 'a', room: 'studio' }] });
+    expect(d.room).toBe('studio');
+  });
+  it('parseRoster rejects an unknown room naming the field', () => {
+    expect(() => parseRoster({ residents: [{ ...base, id: 'a', room: 'nope' }] })).toThrow(/residents\[0\]\.room/);
+  });
+  it('shipped roster maps the six residents to their variants', () => {
+    const m = Object.fromEntries(parseRoster(shipped()).map((d) => [d.id, d.room]));
+    expect(m).toEqual({
+      hiraya: 'lead',
+      'talend-designer': 'studio',
+      'talend-developer': 'devbay',
+      'talend-reviewer': 'review',
+      'talend-qa': 'testlab',
+      makisig: 'server',
+    });
+  });
+  it('snapshot rooms carry the variant, Hiraya folded room included', () => {
+    const { office } = makeOffice({ roster: parseRoster(shipped()) });
+    const rooms = office.commit().snapshot.rooms;
+    expect(rooms.find((r) => r.id === 'resident:talend-designer')!.variant).toBe('studio');
+    expect(rooms.find((r) => r.id === normalizeCwd('C:/ClaudeCode_v2'))!.variant).toBe('lead');
+  });
+  it('a real agent in Hiraya cwd written another way still gives one lead room', () => {
+    const { office, now } = makeOffice({ roster: parseRoster(shipped()) });
+    office.addMain(main('acc:1', 'C:\\claudecode_v2', now()));
+    const rooms = office.commit().snapshot.rooms.filter((r) => r.variant === 'lead');
+    expect(rooms).toHaveLength(1);
+  });
+  it('an empty roster gives no variant anywhere', () => {
+    const { office } = makeOffice({ roster: [] });
+    expect(office.commit().snapshot.rooms.every((r) => r.variant === undefined)).toBe(true);
+  });
+});
+
 describe('residents: overlay no Office', () => {
   const roster = () => parseRoster(shipped());
   const HIRAYA_ROOM = normalizeCwd('C:/ClaudeCode_v2');

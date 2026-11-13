@@ -193,6 +193,9 @@ export interface AgentInfo {
   resident?: true;
 }
 
+/** MTC: themed resident room interior (roster `room` field). No variant = the stock project room. */
+export type RoomKind = 'lead' | 'studio' | 'devbay' | 'review' | 'testlab' | 'server';
+
 export interface RoomInfo {
   /** Chave estável: cwd normalizado do projeto. */
   id: string;
@@ -210,6 +213,8 @@ export interface RoomInfo {
   /** Semente para cores/decoração determinísticas. */
   seed: number;
   createdAt: number;
+  /** MTC: themed interior of a resident room (from the roster); absent = stock room. */
+  variant?: RoomKind;
   /** Efeito visual temporário na sala (eventos do GitHub detectados nos transcripts; ver shared/github.ts). */
   effect?: RoomEffect;
 }

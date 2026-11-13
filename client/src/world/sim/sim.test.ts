@@ -827,6 +827,16 @@ describe('MTC residents', () => {
     expect(sim.chars.has('a2')).toBe(true);
   });
 
+  it('a room variant reaches the layout (server variant puts racks in a non-Makisig room)', () => {
+    const sim = newSim();
+    const r: RoomInfo = { ...room('resident:other', 0), name: 'Other', variant: 'server' };
+    const plain: RoomInfo = { ...room('/p', 1), name: 'p' };
+    sim.applySnapshot(snap([r, plain], []), T0);
+    const racks = (id: string) => sim.rooms.get(id)!.layout.furniture.filter((f) => f.kind === 'server_rack').length;
+    expect(racks('resident:other')).toBe(3);
+    expect(racks('/p')).toBe(0);
+  });
+
   it("Makisig's resident room gets the dark server theme", () => {
     const sim = newSim();
     const r: RoomInfo = { ...room('resident:makisig', 0), name: 'Makisig' };
