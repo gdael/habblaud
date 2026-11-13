@@ -1,0 +1,205 @@
+// Interior das salas de projeto: o interior padrão (ilha 3x2, canto de reunião, estante e
+// coluna, cantos de baixo, pontos em pé) e os interiores temáticos das salas dos residentes
+// (MTC). `layoutProjectRoom` monta a casca (piso, paredes, porta, caminhabilidade, itens de
+// parede) e delega o interior para cá.
+//
+// Regra de ouro: o interior padrão consome o rng da sala exatamente na mesma ordem de antes, para
+// que as salas de projeto comuns (sem variante) fiquem idênticas (guardado por fixture em teste).
+import type { Dir, FurnitureKind, RoomTheme } from '../../art/api';
+import { TILE } from '../constants';
+import type { SpotOpts } from './builder';
+import type { RoomKind } from '../../../../shared/types';
+import type { CornerStyle, RoomVariant } from './room';
+import type { SpotDef, SpotKind } from './types';
+
+const PLANTS_TALL = ['palm', 'ficus', 'monstera', 'bonsai'] as const;
+const PLANTS_SMALL = ['fern', 'succulent', 'flower'] as const;
+const BEANBAGS = ['red', 'blue', 'yellow', 'green'] as const;
+
+/** Variação de uma cor hex (clareia/escurece) — usado para tapetes e detalhes. */
+export function shade(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v + (amount > 0 ? (255 - v) * amount : v * amount))));
+  const r = ch((n >> 16) & 255);
+  const g = ch((n >> 8) & 255);
+  const b = ch(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * O que um interior recebe de `layoutProjectRoom`: as mesmas funções locais de lá (coordenadas
+ * locais pensadas com a ilha à esquerda; o espelhamento já é aplicado por elas).
+ */
+export interface InteriorCtx {
+  furn: (kind: FurnitureKind, lx: number, ly: number, variant?: string, o?: { dx?: number; dy?: number; order?: number; seat?: string }) => string;
+  seat: (kind: SpotKind, fk: FurnitureKind, lx: number, ly: number, dir: Dir, variant?: string, o?: SpotOpts & { order?: number }, dirVariant?: boolean) => SpotDef;
+  spot: (kind: SpotKind, lx: number, ly: number, dir: Dir, o?: SpotOpts) => SpotDef;
+  wallItem: (kind: FurnitureKind, cx: number, variant?: string, o?: { ly?: number; on?: 'face' | 'south'; order?: number }) => string;
+  rug: (lx: number, ly: number, w: number, h: number, color: string, seed: number) => void;
+  /** Sorteio com o rng da sala (cada chamada consome um número). */
+  pick: <T>(arr: readonly T[]) => T;
+  /** O rng da sala, para sorteios que não são `pick`. */
+  rng: () => number;
+  theme: RoomTheme;
+  /** Sala ao norte do corredor (porta na parede sul). */
+  north: boolean;
+  /** Layout espelhado (a ilha vai para a direita). */
+  mirror: boolean;
+  /** Semente da sala. */
+  seed: number;
+  /** Variações sorteadas pela semente (canto de reunião, cantos de baixo). */
+  rv: RoomVariant;
+}
+
+/**
+ * Interior temático de uma variante. Devolve false quando a variante ainda não tem interior
+ * próprio: então o chamador usa o interior padrão.
+ */
+export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
+  switch (kind) {
+    case 'server':
+      // por enquanto: o interior padrão com racks no lugar da coluna de apoio (como o antigo serverRoom)
+      placeStockInterior(c, { server: true });
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Interior padrão das salas de projeto. `server` troca a coluna de apoio por racks (sem sortear a coluna). */
+export function placeStockInterior(c: InteriorCtx, opts: { server?: boolean } = {}): void {
+  const { furn, seat, spot, rug, pick, rng, theme, north } = c;
+  const v = c.rv;
+  const seed = c.seed;
+
+  // ---- ilha de trabalho 3x2 face a face (colunas 2–7, linhas 4–7)
+  const deskV = theme.deskVariant;
+  const chairV = theme.chairVariant;
+  const ranks = [2, 0, 4];
+  for (let i = 0; i < 3; i++) {
+    const lx = 2 + i * 2;
+    const back = furn('desk_back', lx, 5, deskV, { order: 0.35 + i * 0.05, seat: `N${i}` });
+    const front = furn('desk', lx, 6, deskV, { order: 0.4 + i * 0.05, seat: `S${i}` });
+    seat('desk', 'office_chair_front', lx, 4, 'down', chairV, { dx: TILE / 2, deskId: back, rank: ranks[i] + 1, side: 'N', order: 0.55 + i * 0.03 });
+    seat('desk', 'office_chair', lx, 7, 'up', chairV, { dx: TILE / 2, deskId: front, rank: ranks[i], side: 'S', order: 0.6 + i * 0.03 });
+  }
+  furn('trash_bin', 9, 6, undefined, { order: 0.7 });
+
+  // ---- canto de reunião (assentos extras para subagentes: banquetas ou poltronas)
+  if (v.meeting === 'table') {
+    furn('meeting_table', 10, 5, undefined, { order: 0.45 });
+    seat('stool', 'stool', 10, 4, 'down', undefined, { order: 0.65 });
+    seat('stool', 'stool', 12, 4, 'down', undefined, { order: 0.66 });
+    seat('stool', 'stool', 10, 7, 'up', undefined, { order: 0.67 });
+    seat('stool', 'stool', 12, 7, 'up', undefined, { order: 0.68 });
+  } else if (v.meeting === 'round') {
+    // duas mesinhas redondas com duas banquetas cada (em diagonal, para circular entre elas)
+    furn('cafe_table', 11, 4, undefined, { order: 0.45 });
+    seat('stool', 'stool', 10, 4, 'right', undefined, { order: 0.65 });
+    seat('stool', 'stool', 12, 4, 'left', undefined, { order: 0.66 });
+    furn('cafe_table', 11, 7, undefined, { order: 0.46 });
+    seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.67 });
+    seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.68 });
+    furn('plant_small', 12, 5, pick(PLANTS_SMALL), { order: 0.47 });
+  } else {
+    // recanto com poltronas e puffs em volta de uma mesa de centro (sem mesa de reunião)
+    rug(9.6, 3.7, 4.8, 4.6, shade(theme.carpet2, 0.25), seed + 2);
+    furn('coffee_table', 10, 5, undefined, { order: 0.45 });
+    seat('nook', 'armchair', 9, 5, 'right', undefined, { order: 0.65 }, true);
+    seat('nook', 'armchair', 12, 5, 'left', undefined, { order: 0.66 }, true);
+    seat('nook', 'beanbag', 10, 7, 'up', pick(BEANBAGS), { order: 0.67 });
+    seat('nook', 'beanbag', 11, 7, 'up', pick(BEANBAGS), { order: 0.68 });
+    seat('nook', 'beanbag', 11, 3, 'down', pick(BEANBAGS), { order: 0.69 });
+  }
+
+  // ---- apoio: estante na parede norte (sem cobrir quadro, placa ou janela) e coluna junto à parede
+  const tall = pick(PLANTS_TALL);
+  const shelfX = north ? 1 : 4;
+  furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
+  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
+  furn('plant_tall', 14, 2, tall, { order: 0.2 });
+  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
+  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+  const isServer = opts.server === true;
+  const column = isServer ? -1 : Math.floor(rng() * 3);
+  if (isServer) {
+    furn('server_rack', 14, 4, undefined, { order: 0.3 });
+    furn('server_rack', 14, 5, undefined, { order: 0.31 });
+    furn('server_rack', 14, 6, undefined, { order: 0.32 });
+    furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
+  } else if (column === 0) {
+    furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
+    furn('printer', 14, 6, undefined, { order: 0.32 });
+    furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
+  } else if (column === 1) {
+    furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
+    furn('binder_shelf', 14, 5, undefined, { order: 0.31 });
+    furn('floor_lamp', 14, 8, undefined, { order: 0.34 });
+  } else {
+    furn('floor_lamp', 14, 4, undefined, { order: 0.3 });
+    furn('filing_cabinet', 14, 6, undefined, { order: 0.32 });
+    furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+  }
+
+  // ---- cantos da parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre)
+  corner(v.left, 'left');
+  corner(v.right, 'right');
+
+  function corner(style: CornerStyle, where: 'left' | 'right'): void {
+    // a zona da esquerda ocupa as colunas 1–5; a da direita, 10–14
+    const x0 = where === 'left' ? 1 : 10;
+    const o = 0.2 + (where === 'left' ? 0 : 0.05);
+    switch (style) {
+      case 'rest': {
+        // canto de descanso: tapete, dois puffs (também servem de lugar extra) e plantas
+        rug(x0 + 0.5, 8.85, 4, 2, shade(theme.carpet, 0.35), seed + 3);
+        seat('nook', 'beanbag', x0 + 1, 10, 'up', pick(BEANBAGS), { order: o + 0.4 });
+        seat('nook', 'beanbag', x0 + 3, 10, 'up', pick(BEANBAGS), { order: o + 0.41 });
+        furn('plant_small', x0 + 2, 10, pick(PLANTS_SMALL), { order: o });
+        furn('plant_tall', where === 'left' ? x0 : x0 + 4, 10, pick(PLANTS_TALL), { order: o + 0.01 });
+        return;
+      }
+      case 'print': {
+        // estação de impressão com estante de pastas e arquivo
+        furn('printer', x0, 10, undefined, { order: o });
+        furn('binder_shelf', x0 + 1, 10, undefined, { order: o + 0.01 });
+        furn('binder_shelf', x0 + 2, 10, undefined, { order: o + 0.02 });
+        furn('filing_cabinet', x0 + 3, 10, undefined, { order: o + 0.03 });
+        furn('trash_bin', x0 + 4, 10, undefined, { order: o + 0.04 });
+        return;
+      }
+      case 'green': {
+        // cantinho verde com luminária e uma poltrona de leitura
+        furn('plant_tall', x0, 10, pick(PLANTS_TALL), { order: o });
+        furn('floor_lamp', x0 + 1, 10, undefined, { order: o + 0.01 });
+        seat('nook', 'armchair', x0 + 2, 10, 'up', undefined, { order: o + 0.4 }, true);
+        furn('plant_small', x0 + 3, 10, pick(PLANTS_SMALL), { order: o + 0.02 });
+        furn('plant_tall', x0 + 4, 10, pick(PLANTS_TALL), { order: o + 0.03 });
+        return;
+      }
+      case 'standdesk': {
+        // mesa de pé com notebook (lugar de trabalho em pé, de frente para a câmera)
+        furn('cafe_table', x0 + 2, 10, undefined, { order: o });
+        spot('stand', x0 + 2, 9, 'down', { dy: -1 });
+        furn('plant_small', x0 + 4, 10, pick(PLANTS_SMALL), { order: o + 0.01 });
+        furn('trash_bin', x0, 10, undefined, { order: o + 0.02 });
+        return;
+      }
+      case 'stands': {
+        // pontos em pé junto ao quadro móvel/estante baixa
+        furn('filing_cabinet', x0 + 4, 10, undefined, { order: o });
+        furn('plant_small', x0, 10, pick(PLANTS_SMALL), { order: o + 0.01 });
+        spot('stand', x0 + 1, 9, 'up', { dy: -2 });
+        spot('stand', x0 + 2, 9, 'up', { dy: -2 });
+        return;
+      }
+    }
+  }
+
+  // pontos em pé (subagentes sem lugar sentado trabalham aqui; também servem de conversa)
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 7, 'right');
+  spot('stand', 13, 9, 'up', { dy: -2 });
+}

@@ -3,7 +3,10 @@ import { FURNITURE, TILE, type FurnitureKind, type RoomTheme } from '../../art/a
 import { BUILDING_H, COL_W, CORRIDOR_Y, SOUTH_Y } from '../constants';
 import { assembleBuilding, coreAreas } from './building';
 import { columnsFor, slotAt, slotColumn, slotRect, slotSide } from './geometry';
-import { layoutProjectRoom, roomVariant } from './room';
+import { layoutProjectRoom, roomVariant, type RoomInput } from './room';
+import { placeInterior, type InteriorCtx } from './room-variants';
+import type { RoomKind } from '../../../../shared/types';
+import roomFixture from './room-layout.fixture.json';
 import { layoutExterior, slotShell } from './exterior';
 import { RECEPTION_ID } from './core';
 import type { AreaLayout } from './types';
@@ -234,5 +237,101 @@ describe('itens de parede', () => {
     const restroom = coreAreas().find((a) => a.kind === 'restroom')!;
     expect(restroom.wallItems.some((w) => w.kind === 'door_frame')).toBe(true);
     for (const room of roomsFor([1, 3, 7])) expect(room.wallItems.some((w) => w.kind === 'door_frame'), room.id).toBe(true);
+  });
+});
+
+/**
+ * Invariantes de qualquer sala de projeto (padrão ou temática): ao menos uma mesa, todo spot
+ * alcançável a partir da porta (BFS no grid de caminhada), footprints de móveis sem sobreposição
+ * e tiles da porta caminháveis. Usado pelos testes das variantes (salas dos residentes).
+ */
+export function assertRoomInvariants(layout: AreaLayout): void {
+  expect(layout.spots.some((s) => s.kind === 'desk'), `${layout.id}: sem mesa`).toBe(true);
+  const used = new Map<string, string>();
+  for (const f of layout.furniture) {
+    const def = FURNITURE[f.kind];
+    for (let y = f.ty; y < f.ty + def.footprint.h; y++)
+      for (let x = f.tx; x < f.tx + def.footprint.w; x++) {
+        const key = `${x},${y}`;
+        expect(used.get(key), `${layout.id}: ${f.id} sobre ${used.get(key)}`).toBeUndefined();
+        used.set(key, f.id);
+      }
+  }
+  const slot = slotAt(layout.rect.x / COL_W, layout.side ?? 'north');
+  const b = assembleBuilding(columnsFor([slot]), [layout]);
+  const door = layout.door!;
+  expect(door, `${layout.id}: sem porta`).toBeDefined();
+  for (let y = door.y; y < door.y + door.h; y++)
+    for (let x = door.x; x < door.x + door.w; x++) expect(b.grid.walkable(x, y), `${layout.id}: porta ${x},${y} bloqueada`).toBe(true);
+  const reach = b.grid.reachableFrom(door.x, door.y);
+  for (const sp of layout.spots) expect(reach[sp.ty * b.grid.w + sp.tx], `${layout.id}: ${sp.id} inalcançável`).toBe(1);
+}
+
+/** Salas da fixture: chave `slot:semente` (12 salas padrão, slots 0/1, espelhadas ou não). */
+const FIXTURE = roomFixture as unknown as { stock: Record<string, AreaLayout>; server: Record<string, AreaLayout> };
+const fixtureRooms = (rec: Record<string, AreaLayout>) =>
+  Object.keys(rec).map((k) => {
+    const [slot, seed] = k.split(':').map(Number);
+    return { key: k, slot, seed };
+  });
+const fxLayout = (input: RoomInput) => JSON.parse(JSON.stringify(layoutProjectRoom(input, theme))) as AreaLayout;
+
+describe('variantes das salas: despacho do interior', () => {
+  it('a fixture cobre os dois lados e os dois espelhamentos', () => {
+    const rooms = fixtureRooms(FIXTURE.stock);
+    expect(rooms).toHaveLength(12);
+    const combos = new Set(rooms.map((r) => `${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`));
+    expect(combos).toEqual(new Set(['north/false', 'north/true', 'south/false', 'south/true']));
+  });
+
+  it('salas padrão (sem variante) ficam idênticas à fixture', () => {
+    for (const r of fixtureRooms(FIXTURE.stock)) {
+      const got = fxLayout({ id: `/fx/${r.seed}`, slot: r.slot, seed: r.seed });
+      expect(JSON.stringify(got), r.key).toBe(JSON.stringify(FIXTURE.stock[r.key]));
+    }
+  });
+
+  it("sala servidor ('server' ou o antigo serverRoom) fica idêntica à fixture", () => {
+    for (const r of fixtureRooms(FIXTURE.server)) {
+      const want = JSON.stringify(FIXTURE.server[r.key]);
+      expect(JSON.stringify(fxLayout({ id: `/fx/${r.seed}`, slot: r.slot, seed: r.seed, serverRoom: true })), r.key).toBe(want);
+      expect(JSON.stringify(fxLayout({ id: `/fx/${r.seed}`, slot: r.slot, seed: r.seed, variant: 'server' })), r.key).toBe(want);
+    }
+  });
+
+  it('invariantes valem para as salas padrão e servidor nos dois lados', () => {
+    for (const r of fixtureRooms(FIXTURE.stock)) {
+      assertRoomInvariants(layoutProjectRoom({ id: `/fx/${r.seed}`, slot: r.slot, seed: r.seed }, theme));
+      assertRoomInvariants(layoutProjectRoom({ id: `/fx/${r.seed}`, slot: r.slot, seed: r.seed, variant: 'server' }, theme));
+    }
+  });
+
+  it('variante sem interior próprio devolve false e não mexe em nada', () => {
+    const calls: string[] = [];
+    const rec = (name: string) => (..._args: unknown[]) => {
+      calls.push(name);
+      return name;
+    };
+    const ctx = {
+      furn: rec('furn'),
+      seat: rec('seat'),
+      spot: rec('spot'),
+      wallItem: rec('wallItem'),
+      rug: rec('rug'),
+      pick: rec('pick'),
+      rng: () => {
+        calls.push('rng');
+        return 0;
+      },
+      theme,
+      north: true,
+      mirror: false,
+      seed: 1,
+      rv: roomVariant(1),
+    } as unknown as InteriorCtx;
+    expect(placeInterior('unknown-kind' as RoomKind, ctx)).toBe(false);
+    expect(calls).toEqual([]);
+    expect(placeInterior('server', ctx)).toBe(true);
+    expect(calls.length).toBeGreaterThan(0);
   });
 });
