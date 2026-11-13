@@ -6,7 +6,7 @@ import type { AgentInfo } from '../../../shared/types';
 import type { UiContext } from './context';
 import { moveAgent, orderAgents } from './agentorder';
 import { h, KeyedList, setAttr, setHidden, setText, setTitle } from './dom';
-import { activityFallback } from './model';
+import { activityFallback, isTabPeer } from './model';
 import { ptyControllable, stopAgent } from './ptyapi';
 import { createStatusDot, updateStatusDot } from './widgets';
 import { tr } from '../../../shared/i18n';
@@ -99,7 +99,7 @@ ${doing}` : ''}${live ? tr(' (interativo)') : ''}`);
     this.roomId = agent?.roomId ?? null;
     const peers = agent
       ? (this.ctx.store.snapshot?.agents ?? [])
-          .filter((a) => a.kind === 'main' && a.roomId === agent.roomId && a.status !== 'offline' && !a.id.startsWith('demo:'))
+          .filter((a) => isTabPeer(a, agent.roomId))
           .sort((x, y) => x.startedAt - y.startedAt || x.id.localeCompare(y.id))
       : [];
     this.peers = agent ? orderAgents(agent.roomId, peers, (a) => a.sessionId) : [];

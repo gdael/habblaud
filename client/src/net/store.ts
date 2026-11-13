@@ -7,6 +7,7 @@
 import type { AppearanceParts } from '../../../shared/appearance';
 import type { Activity, AgentDetail, AgentInfo, FeedItem, Notice, OfficeSnapshot, OutboxMessage, PermissionDecision, PermissionRequestInfo, RoomInfo } from '../../../shared/types';
 import { DemoSimulator } from '../../../shared/demo/simulator';
+import { isResidentId } from '../../../shared/timeline';
 import { tr } from '../../../shared/i18n';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed' | 'mock';
@@ -344,7 +345,7 @@ export class OfficeStore {
   private mockSend(agentId: string, text: string): { message: OutboxMessage } | { error: string } {
     const a = this.agent(agentId);
     if (!a) return { error: tr('agente desconhecido: ele já saiu do escritório?') };
-    if (!a.canMessage || a.kind !== 'main' || a.status === 'offline') return { error: tr('este agente não recebe mensagens agora') };
+    if (!a.canMessage || a.kind !== 'main' || a.status === 'offline' || isResidentId(agentId)) return { error: tr('este agente não recebe mensagens agora') };
     const now = Date.now();
     const msg: OutboxMessage = { id: `mock-${now.toString(36)}-${++this.mockSeq}`, agentId, status: 'queued', createdAt: now, updatedAt: now };
     this.mockOutbox.set(msg.id, msg);

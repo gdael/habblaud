@@ -45,9 +45,14 @@ export function roleLabel(agent: Pick<AgentInfo, 'kind' | 'role'>): string {
   return agent.role || tr('Subagente');
 }
 
+/** Agente que vira aba na janela de terminal da sala: principal presente, nem demo nem residente (`resident:`). */
+export function isTabPeer(a: Pick<AgentInfo, 'id' | 'kind' | 'roomId' | 'status'>, roomId: string): boolean {
+  return a.kind === 'main' && a.roomId === roomId && a.status !== 'offline' && !a.id.startsWith('demo:') && !isResidentId(a.id);
+}
+
 /** Texto do selo de papel: o cargo do residente ("Developer", "Lead"), senão "Principal" ou o tipo do subagente. */
 export function roleBadgeText(agent: Pick<AgentInfo, 'kind' | 'role' | 'resident'>): string {
-  return agent.resident ? agent.role : agent.kind === 'main' ? tr('Principal') : agent.role || tr('Subagente');
+  return agent.resident && agent.role ? agent.role : agent.kind === 'main' ? tr('Principal') : agent.role || tr('Subagente');
 }
 
 /** Há quanto tempo o agente principal (ou residente) está ocioso, em ms; 0 se não está. */

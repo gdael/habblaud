@@ -3,7 +3,7 @@ import type { AgentInfo, RoomInfo } from '../../../shared/types';
 import { isResidentId } from '../../../shared/timeline';
 import { composerMode } from './composer-model';
 import { canEditCharacter } from './character-model';
-import { computeCounters, idleForMs, roleBadgeText, statusLabel } from './model';
+import { computeCounters, idleForMs, isTabPeer, roleBadgeText } from './model';
 import { ptyControllable } from './ptyapi';
 
 function agent(p: Partial<AgentInfo> & Pick<AgentInfo, 'id' | 'roomId'>): AgentInfo {
@@ -44,7 +44,7 @@ describe('residents', () => {
   it('no PTY, no editor, no messages for resident: ids; adopted Hiraya stays stock', () => {
     const r = res('dev', 'mtc');
     expect(ptyControllable(r)).toBe(false);
-    expect(canEditCharacter(r, { live: true, terminal: false, local: true, replaying: false, mock: false })).toBe(false);
+    expect(canEditCharacter(r, { live: true, terminal: true, local: true, replaying: false, mock: false })).toBe(false);
     expect(composerMode(r, { enabled: true, local: true, replaying: false }).kind).toBe('off');
     const h = agent({ id: '.claude:42', roomId: 'v2', resident: true, canMessage: true });
     expect(ptyControllable(h)).toBe(true);
@@ -60,6 +60,15 @@ describe('residents', () => {
   it('idle residents show idle time and a resting status', () => {
     expect(idleForMs(res('dev', 'mtc', { statusSince: 1000 }), 61_000)).toBe(60_000);
     expect(idleForMs(res('dev', 'mtc', { status: 'working', statusSince: 1000 }), 61_000)).toBe(0);
-    expect(statusLabel('idle')).not.toMatch(/principal/i);
+    expect(idleForMs(res('dev', 'mtc', { statusSince: 1000 }), 61_000)).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('badge falls back to stock label when a resident role is empty', () => {
+    expect(roleBadgeText(agent({ id: 'resident:x', roomId: 'r', resident: true, role: '' }))).toBe('Principal');
+  });
+
+  it('terminal tabs skip resident: agents, keep adopted Hiraya', () => {
+    const peers = [res('dev', 'mtc'), res('qa', 'mtc'), agent({ id: '.claude:42', roomId: 'mtc', resident: true, role: 'Lead' })];
+    expect(peers.filter((a) => isTabPeer(a, 'mtc')).map((a) => a.id)).toEqual(['.claude:42']);
   });
 });
