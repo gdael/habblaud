@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { describe, expect, it, beforeAll } from 'vitest';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, beforeAll, vi, afterEach } from 'vitest';
 import type { Activity, PermissionRequestInfo } from '../../shared/types';
-import { setQuiet } from '../log.js';
+import { log, setQuiet } from '../log.js';
+import { tempDir } from '../test/fixtures.js';
 import { NameStore } from './names';
 import { Office } from './office';
 import { normalizeCwd } from './rooms.js';
@@ -54,8 +56,48 @@ describe('residents', () => {
     expect(isResidentId('resident:x')).toBe(true);
     expect(isResidentId('x')).toBe(false);
   });
-  it('loadRoster never throws', () => {
+  it('rejects duplicate ids case-insensitively', () => {
+    expect(() => parseRoster({ residents: [{ ...base, id: 'Hiraya' }, { ...base, id: 'hiraya' }] })).toThrow(/duplicate/);
+  });
+  it('returns trimmed strings', () => {
+    const [d] = parseRoster({ residents: [{ ...base, id: ' a ', name: ' N ' }] });
+    expect(d.id).toBe('a');
+    expect(d.name).toBe('N');
+    expect(matchResident([d], 'a')?.id).toBe('a');
+  });
+  it('shipped roster: 6 residents, Hiraya cwd is C:/ClaudeCode_v2', () => {
+    const roster = parseRoster(shipped());
+    expect(roster).toHaveLength(6);
+    expect(roster.find((d) => d.id === 'hiraya')!.cwd).toBe('C:/ClaudeCode_v2');
+  });
+});
+
+describe('loadRoster', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const withFile = (content: string, fn: (file: string) => void) => {
+    const t = tempDir();
+    try {
+      const file = join(t.dir, 'roster.json');
+      writeFileSync(file, content);
+      fn(file);
+    } finally {
+      t.cleanup();
+    }
+  };
+  it('missing file: [] and exactly one warning', () => {
+    const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
     expect(loadRoster('nope.json')).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it('invalid JSON: [] and one warning', () => {
+    const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    withFile('{ not json', (f) => expect(loadRoster(f)).toEqual([]));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it('invalid schema: [] and one warning', () => {
+    const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    withFile(JSON.stringify({ residents: [{ id: 'a' }] }), (f) => expect(loadRoster(f)).toEqual([]));
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -296,6 +338,67 @@ describe('residents: overlay no Office', () => {
     expect(d.agent.id).toBe('resident:talend-developer');
     expect(d.agent.status).toBe('working');
     expect(office.detail('resident:nope')).toBeUndefined();
+  });
+
+  it('adopted Hiraya drops parts and custom (look is fixed)', () => {
+    const { office, now } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    const rec = office.get('acc:1')!;
+    rec.custom = true;
+    rec.parts = { hair: 1 } as never;
+    const hir = office.commit().snapshot.agents.find((a) => a.id === 'acc:1')!;
+    expect(hir.resident).toBe(true);
+    expect(hir.parts).toBeUndefined();
+    expect(hir.custom).toBeUndefined();
+  });
+
+  it('subs of a hidden closed adoptee follow the current adopted view, or the placeholder', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    office.commit();
+    office.addSub(sub('s:old', 'acc:1', 'Explore', now()));
+    office.closeMain('acc:1');
+    // closed, nobody else: sub hangs off the placeholder
+    let snap = office.commit().snapshot;
+    expect(snap.agents.find((a) => a.id === 's:old')!.parentId).toBe('resident:hiraya');
+    advance(1_000);
+    office.addMain(main('acc:2', 'C:/ClaudeCode_v2', now()));
+    snap = office.commit().snapshot;
+    expect(snap.agents.find((a) => a.id === 's:old')!.parentId).toBe('acc:2');
+  });
+
+  it('folded room lookups for backslash cwd', () => {
+    const reach = new Set<string>();
+    const aliases: string[] = [];
+    let clock = 1_000_000;
+    const office = new Office({
+      names: new NameStore(null),
+      version: 't',
+      startedAt: clock,
+      accounts: (s) => [{ id: 'acc', short: 'C', name: 'C', color: '#fff', configDir: '/x', sessions: s.get('acc') ?? 0, usageStatus: 'disabled' }],
+      sources: () => [],
+      accountName: () => 'C',
+      now: () => clock,
+      roster: roster(),
+      messages: () => reach,
+      roomAlias: (p) => {
+        aliases.push(p);
+        return p.toLowerCase().includes('claudecode_v2') ? 'Casa' : undefined;
+      },
+    });
+    office.addMain(main('acc:1', 'C:\\ClaudeCode_v2', clock));
+    const r = office.commit();
+    expect(office.roomPath(HIRAYA_ROOM)).toBe('C:\\ClaudeCode_v2');
+    expect(r.snapshot.rooms.find((x) => x.id === HIRAYA_ROOM)!.name).toBe('Casa');
+    expect(r.notices.some((n) => n.text.includes('Nova sala'))).toBe(false);
+  });
+
+  it('GitHub effect recorded under the backslash cwd room shows on Hiraya room', () => {
+    const { office, now } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:\\ClaudeCode_v2', now()));
+    office.githubEvent('acc:1', { kind: 'ci_failed', repo: 'o/r', branch: 'main' }, { key: 'k1', at: now() });
+    const room = office.commit().snapshot.rooms.find((x) => x.id === HIRAYA_ROOM)!;
+    expect(room.effect).toBeDefined();
   });
 
   it('empty roster: snapshot identical to stock', () => {

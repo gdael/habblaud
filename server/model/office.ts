@@ -1039,6 +1039,8 @@ export class Office {
     const absorbed = new Map<string, string>();
     /** Real mains shown as (or folded into) a main resident: they leave the list as themselves, no re-parenting. */
     const hidden = new Set<string>();
+    /** Hidden closed adoptees: real id -> id of the view that now stands for that resident (their subs follow it). */
+    const hiddenTo = new Map<string, string>();
     const residents: AgentInfo[] = [];
     for (const def of roster) {
       const id = residentAgentId(def);
@@ -1067,9 +1069,17 @@ export class Office {
         const mains = real.filter((a) => a.kind === 'main' && roomKey(a.roomId) === key);
         const src = mains.filter(live).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))[0];
         // Earlier adoptees on their way out are this resident too: no second character.
-        for (const a of mains) if (a === src || (!live(a) && this.adoptedMains.has(a.id))) hidden.add(a.id);
+        for (const a of mains) {
+          if (a === src || (!live(a) && this.adoptedMains.has(a.id))) {
+            hidden.add(a.id);
+            if (a !== src) hiddenTo.set(a.id, src ? src.id : id);
+          }
+        }
         if (src) {
           view = { ...src, roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
+          // Hiraya's look is fixed by the roster: no project-character overrides.
+          delete view.parts;
+          delete view.custom;
           sources.set(src.id, src.id);
           adopted.push(src.id);
         }
@@ -1101,7 +1111,7 @@ export class Office {
     const rest = real
       .filter((a) => !absorbed.has(a.id) && !hidden.has(a.id))
       .map((a) => {
-        const parentId = a.parentId && absorbed.get(a.parentId);
+        const parentId = a.parentId && (absorbed.get(a.parentId) ?? hiddenTo.get(a.parentId));
         const roomId = mainRooms.get(roomKey(a.roomId));
         if (!parentId && (!roomId || roomId === a.roomId)) return a;
         const c = { ...a };

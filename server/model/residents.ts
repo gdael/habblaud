@@ -16,14 +16,14 @@ export interface ResidentDef {
 
 function str(v: unknown, field: string): string {
   if (typeof v !== 'string' || v.trim() === '') throw new Error(`roster: ${field} must be a non-empty string`);
-  return v;
+  return v.trim();
 }
 
 function strList(v: unknown, field: string): string[] {
   if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || x.trim() === '')) {
     throw new Error(`roster: ${field} must be an array of non-empty strings`);
   }
-  return v as string[];
+  return (v as string[]).map((x) => x.trim());
 }
 
 /** Valida o JSON do roster à mão; lança Error nomeando o campo inválido. */
@@ -36,8 +36,8 @@ export function parseRoster(raw: unknown): ResidentDef[] {
     if (!item || typeof item !== 'object') throw new Error(`roster: ${p} must be an object`);
     const r = item as Record<string, unknown>;
     const id = str(r.id, `${p}.id`);
-    if (seen.has(id)) throw new Error(`roster: ${p}.id duplicate "${id}"`);
-    seen.add(id);
+    if (seen.has(id.toLowerCase())) throw new Error(`roster: ${p}.id duplicate "${id}"`);
+    seen.add(id.toLowerCase());
     const name = str(r.name, `${p}.name`);
     const role = str(r.role, `${p}.role`);
     if (r.look !== 'f' && r.look !== 'm') throw new Error(`roster: ${p}.look must be "f" or "m"`);
