@@ -780,6 +780,126 @@ export function coffeeStation(): BufFurniture {
   return { base: s };
 }
 
+/**
+ * Quadro de revisão (item de parede, 2 tiles, sala do Reviewer, MTC): quadro navy com moldura navy
+ * clara, uma lista de verificação (caixas brancas; as aprovadas com um check verde e a linha em
+ * branco, as em aberto vazias com a linha em Mist), uma lupa em Mist no canto direito e, embaixo
+ * dela, uma barra de progresso verde. Um alfinete âmbar no topo (o âmbar é só destaque).
+ */
+export function reviewBoard(): BufFurniture {
+  const s = wallSheet(2);
+  const b = s.buf;
+  const frame = ramp(MTC_NAVY, 0.07);
+  const steel = ramp(MTC_MIST, 0.06);
+  const x = 2;
+  const y = -29;
+  const w = 28;
+  const h = 22;
+  // Moldura (clara em cima e à esquerda, escura embaixo e à direita) e o fundo navy.
+  b.rect(x, y, w, h, frame.lt);
+  b.hline(x, x + w - 1, y, frame.hi);
+  b.vline(x + w - 1, y, y + h - 1, frame.dk);
+  b.hline(x, x + w - 1, y + h - 1, frame.dk);
+  b.rect(x + 1, y + 1, w - 2, h - 2, MTC_NAVY);
+  // Lista: quatro linhas; as linhas 0, 1 e 3 aprovadas (check verde), a 2 em aberto.
+  const checked = [true, true, false, true];
+  const lens = [9, 7, 8, 6];
+  checked.forEach((ok, i) => {
+    const bx = x + 3;
+    const by = y + 3 + i * 4;
+    // caixa 4x4 branca (vazia por dentro)
+    b.rect(bx, by, 4, 4, MTC_WHITE);
+    b.rect(bx + 1, by + 1, 2, 2, MTC_NAVY);
+    if (ok) {
+      // check verde que sai da caixa para o alto (traço de caneta)
+      b.set(bx + 1, by + 1, MTC_GREEN);
+      b.set(bx + 2, by + 2, MTC_GREEN);
+      b.set(bx + 3, by + 1, MTC_GREEN);
+      b.set(bx + 4, by, MTC_GREEN);
+      b.set(bx + 5, by - 1, MTC_GREEN);
+      b.set(bx + 1, by + 2, MTC_GREEN);
+    }
+    b.hline(bx + 7, bx + 6 + lens[i], by + 1, ok ? MTC_WHITE : MTC_MIST);
+    b.hline(bx + 7, bx + 3 + lens[i], by + 2, ok ? MTC_SOFT : MTC_PANEL);
+  });
+  // Lupa: aro Mist, vidro navy médio com reflexo branco e cabo em diagonal.
+  const lx = x + 22;
+  const ly = y + 6;
+  b.ellipse(lx, ly, 3.6, 3.6, steel.base);
+  b.ellipse(lx, ly, 2.2, 2.2, MTC_PANEL);
+  b.set(lx - 1, ly - 1, MTC_WHITE);
+  for (let i = 0; i < 4; i++) {
+    b.set(lx + 3 + i, ly + 3 + i, steel.dk);
+    b.set(lx + 2 + i, ly + 3 + i, steel.lt);
+  }
+  // Barra de progresso (3 de 4 aprovadas): verde e o resto em navy-painel.
+  b.rect(x + 18, y + 15, 6, 2, MTC_GREEN);
+  b.rect(x + 24, y + 15, 2, 2, MTC_PANEL);
+  // Alfinete âmbar no topo, no centro.
+  b.set(x + 14, y + 1, MTC_AMBER);
+  b.set(x + 15, y + 1, MTC_AMBER);
+  b.outline();
+  wallShadow(b, x - 1, y - 1, w + 2, h + 3);
+  return { base: s };
+}
+
+/**
+ * Pilha de documentos (1x1, sala do Reviewer, MTC): carrinho baixo navy com rodinhas e, em cima,
+ * uma pilha alta de papel branco (bordas das folhas em Mist, um prendedor navy) e, ao lado, uma
+ * pilha de pastas (verde, navy, verde suave) intercaladas com folhas brancas; uma etiqueta âmbar
+ * saindo de uma pasta (destaque).
+ */
+export function docStack(): BufFurniture {
+  const s = floorSheet(1, 1, 16);
+  const b = s.buf;
+  const cart = ramp(MTC_PANEL, 0.07);
+  const paper = ramp(MTC_MIST, 0.06);
+  const folder = ramp(MTC_GREEN, 0.08);
+  // Carrinho: tampo, corpo com uma prateleira e rodinhas.
+  frontFace(b, 1, 6, 14, 7, cart);
+  b.hline(1, 14, 9, cart.dd);
+  b.hline(2, 13, 10, cart.lt);
+  topFace(b, 1, 2, 14, 4, cart);
+  for (const wx of [2, 12]) {
+    b.rect(wx, 13, 2, 2, cart.dd);
+    b.set(wx, 13, cart.lt);
+  }
+  // Pilha de papel (esquerda): bloco branco com as bordas das folhas em Mist e o topo claro.
+  const px = 2;
+  const pTop = -10;
+  b.rect(px, pTop, 7, 14, MTC_WHITE);
+  for (let yy = pTop + 3; yy <= 3; yy += 2) b.hline(px, px + 6, yy, paper.base);
+  b.vline(px + 6, pTop + 1, 3, paper.dk);
+  b.hline(px, px + 6, pTop, paper.hi);
+  b.hline(px + 1, px + 5, pTop + 1, MTC_WHITE);
+  // folha torta por cima
+  b.hline(px - 1, px + 4, pTop - 1, MTC_WHITE);
+  // prendedor navy no topo
+  b.rect(px + 2, pTop - 2, 3, 2, MTC_DEEP);
+  // Pilha de pastas (direita): camadas de pasta e folha.
+  const fx = 9;
+  const layers: [number, string][] = [
+    [2, folder.base],
+    [1, MTC_WHITE],
+    [2, MTC_NAVY],
+    [1, MTC_WHITE],
+    [2, MTC_SOFT],
+    [1, MTC_WHITE],
+    [2, folder.lt],
+  ];
+  let yy = 3;
+  for (const [hh, c] of layers) {
+    b.rect(fx, yy - hh + 1, 6, hh, c);
+    yy -= hh;
+  }
+  b.vline(fx + 5, yy + 1, 3, folder.dk);
+  // etiqueta âmbar saindo da pasta navy
+  b.set(fx + 6, -1, MTC_AMBER);
+  b.outline();
+  contact(b, 0, 13, 16, 4, 0.2);
+  return { base: s };
+}
+
 export function filingCabinet(): BufFurniture {
   const s = floorSheet(1, 1, 8);
   const b = s.buf;

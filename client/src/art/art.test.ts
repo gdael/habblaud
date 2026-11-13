@@ -10,7 +10,7 @@ import { PixelBuf } from './core/pixbuf';
 import type { BufSprite } from './core/sprite';
 import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
-import { MTC_PALETTE, coffeeStation, draftingBoard, monitorWall, moodboard, secondMonitor } from './furniture/office';
+import { MTC_PALETTE, coffeeStation, docStack, draftingBoard, monitorWall, moodboard, reviewBoard, secondMonitor } from './furniture/office';
 import { M } from './furniture/kit';
 import { outlineFor, parseColor, ramp, type Ramp } from './core/color';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
@@ -604,6 +604,47 @@ describe('móveis', () => {
     expect(countColor(s.buf, M.oak.base)).toBeGreaterThan(0);
     expect(offPalette(s.buf, COFFEE_RAMPS())).toEqual([]);
     expect(offPalette(withOffBrandPixel(s.buf), COFFEE_RAMPS())).toEqual(['#e2604f']);
+  });
+
+  const REVIEW_BOARD_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.navy, 0.07), ramp(MTC_PALETTE.mist, 0.06)];
+  const DOC_STACK_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.green, 0.08)];
+  /** Fração dos pixels opacos que são âmbar (o âmbar é só destaque). */
+  const amberShare = (buf: PixelBuf) => countColor(buf, '#FEC00B') / buf.countOpaque();
+
+  it('review_board: item de parede do tamanho do footprint, checks verdes e caixas em aberto sobre navy, lupa, só cores MTC', () => {
+    const def = FURNITURE.review_board;
+    expect(def.mount).toBe('wall');
+    expect(def.footprint).toEqual({ w: 2, h: 0 });
+    const s = reviewBoard().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(def.footprint.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (def.footprint.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy);
+    expect(s.buf.countOpaque()).toBeGreaterThan(200);
+    expect(countColor(s.buf, '#0A1F54')).toBeGreaterThan(40);
+    expect(countColor(s.buf, '#35A83F')).toBeGreaterThan(8);
+    expect(countColor(s.buf, '#FFFFFF')).toBeGreaterThan(8);
+    expect(countColor(s.buf, '#A9AEC4')).toBeGreaterThan(0);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
+    expect(offPalette(s.buf, REVIEW_BOARD_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), REVIEW_BOARD_RAMPS())).toEqual(['#e2604f']);
+  });
+
+  it('doc_stack: 1x1 do tamanho do footprint, bloqueia, pilhas de papel branco e pastas sobre carrinho navy, só cores MTC', () => {
+    const def = FURNITURE.doc_stack;
+    expect(def.mount).toBe('floor');
+    expect(def.blocks).toBe(true);
+    expect(def.footprint).toEqual({ w: 1, h: 1 });
+    const s = docStack().base;
+    expect(s.buf.w - 2 * s.buf.ox).toBe(def.footprint.w * TILE);
+    expect(s.ax).toBe(s.buf.ox + (def.footprint.w * TILE) / 2);
+    expect(s.ay).toBe(s.buf.oy + def.footprint.h * TILE);
+    expect(s.buf.countOpaque()).toBeGreaterThan(150);
+    expect(countColor(s.buf, '#FFFFFF')).toBeGreaterThan(20);
+    expect(countColor(s.buf, '#1E2C5D')).toBeGreaterThan(0);
+    expect(countColor(s.buf, '#35A83F') + countColor(s.buf, '#4E8E5C')).toBeGreaterThan(0);
+    expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
+    expect(offPalette(s.buf, DOC_STACK_RAMPS())).toEqual([]);
+    expect(offPalette(withOffBrandPixel(s.buf), DOC_STACK_RAMPS())).toEqual(['#e2604f']);
   });
 
   it('normaliza variantes, estados e sementes', () => {

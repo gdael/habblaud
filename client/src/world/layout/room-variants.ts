@@ -71,6 +71,9 @@ export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
     case 'devbay':
       placeDevbayInterior(c);
       return true;
+    case 'review':
+      placeReviewInterior(c);
+      return true;
     default:
       return false;
   }
@@ -418,4 +421,57 @@ function placeDevbayInterior(c: InteriorCtx): void {
   // pontos em pé para quem visita
   spot('stand', 9, 3, 'left');
   spot('stand', 1, 8, 'right');
+}
+
+/**
+ * Sala de revisão (Reviewer): uma única mesa (rank 0) sobre o tapete da casca, com uma
+ * pilha de documentos de cada lado; atrás dela, a parede de arquivos (gaveteiros e estantes de
+ * pastas); o quadro de revisão (checks, lupa) na parede norte, no lugar da estante, que desce para
+ * a parede de baixo; no lado leste, uma mesinha com duas banquetas para conversar sobre a revisão.
+ */
+function placeReviewInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, wallItem, rug, pick, theme, seed } = c;
+
+  // ---- mesa do Reviewer (rank 0), de costas para a câmera, com as pilhas de documentos ao lado
+  // (colunas 2 e 5, nunca sobre a cadeira) e uma planta pequena no canto; o tapete do tema sob a
+  // mesa é o da casca da sala
+  const desk = furn('desk', 3, 6, theme.deskVariant, { order: 0.4, seat: 'S0' });
+  seat('desk', 'office_chair', 3, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: 0, side: 'S', order: 0.6 });
+  furn('doc_stack', 5, 6, undefined, { order: 0.42 });
+  furn('doc_stack', 2, 6, undefined, { order: 0.41 });
+  furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.4 });
+
+  // ---- parede de arquivos atrás da mesa (linha 4; a linha 3 fica livre para circular)
+  furn('filing_cabinet', 2, 4, undefined, { order: 0.3 });
+  furn('filing_cabinet', 3, 4, undefined, { order: 0.31 });
+  furn('binder_shelf', 4, 4, undefined, { order: 0.32 });
+  furn('binder_shelf', 5, 4, undefined, { order: 0.33 });
+
+  // ---- canto de conversa (lado leste): mesinha com duas banquetas sobre um tapete do tema
+  rug(9.7, 5.9, 3.6, 2.4, shade(theme.carpet, 0.3), seed + 5);
+  furn('cafe_table', 11, 7, undefined, { order: 0.45 });
+  seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.65 });
+  seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.66 });
+
+  // ---- parede norte: o quadro de revisão onde ficaria a estante (sem cobrir quadro, placa ou janela)
+  const shelfX = placeNorthSupport(c, { shelf: false });
+  wallItem('review_board', shelfX + 1, undefined, { order: 0.55 });
+  furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
+  furn('filing_cabinet', 14, 5, undefined, { order: 0.31 });
+  furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre): a estante
+  // encostada embaixo, arquivo, plantas e mais uma pilha de documentos
+  furn('bookshelf', 1, 10, undefined, { order: 0.2 });
+  furn('filing_cabinet', 3, 10, undefined, { order: 0.21 });
+  furn('plant_tall', 4, 10, pick(PLANTS_TALL), { order: 0.22 });
+  furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
+  furn('doc_stack', 12, 10, undefined, { order: 0.26 });
+  furn('binder_shelf', 13, 10, undefined, { order: 0.27 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.28 });
+
+  // pontos em pé para quem visita
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 8, 'right');
+  spot('stand', 11, 5, 'up', { dy: -2 });
 }
