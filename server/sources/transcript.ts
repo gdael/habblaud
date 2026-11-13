@@ -87,6 +87,11 @@ export type TranscriptSignal =
   | { type: 'finished'; toolUseId: string; agentId?: string; runId?: string; error: boolean }
   | { type: 'notification'; toolUseId?: string; taskId?: string; status?: string; summary?: string }
   | { type: 'stopped'; taskId: string }
+  /**
+   * MTC: SendMessage resumed a subagent (tool_result with toolUseResult.resumedAgentId); the agent
+   * writes its transcript again from now on, although its spawn finished long ago.
+   */
+  | { type: 'resumed'; toolUseId: string; agentId: string }
   /** Bash (primeiro ou segundo plano) ou Monitor chamado. */
   | { type: 'shellStart'; shell: ShellStart }
   /** tool_result de um Bash/Monitor: `taskId` = id da tarefa em segundo plano, quando houver. */
@@ -639,6 +644,11 @@ class LineParser {
         this.out.signals.push(sig);
       }
     }
+
+    // MTC: SendMessage to a finished subagent: {success, message, resumedAgentId, revivedAgentId, pin}.
+    // A message to a running agent has no resumedAgentId and is not a resume.
+    const resumedId = str(tur.resumedAgentId) ?? str(tur.revivedAgentId);
+    if (resumedId && !isError && tur.success !== false) this.out.signals.push({ type: 'resumed', toolUseId: id, agentId: resumedId });
 
     const provisional = s.pendingTaskCreates.get(id);
     if (provisional !== undefined) {

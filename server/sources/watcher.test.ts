@@ -520,6 +520,16 @@ describe('ClaudeWatcher — subagent resumed after it finished', () => {
     touch(path, c.now());
   }
 
+  /** Parent transcript: SendMessage to the finished agent, answered with the resume result (synthetic, real shape). */
+  function sendMessage(id = 'toolu_sm1'): void {
+    const input = { to: AGENT, message: 'Also add the reject flow', summary: 'reject flow', type: 'message', content: 'x', recipient: AGENT, recipient_kind: 'agent' };
+    appendLines(c.transcript(SID), [
+      L.assistant([L.tool(id, 'SendMessage', input)], { stop: 'tool_use' }),
+      L.result(id, 'ok', { toolUseResult: { success: true, message: 'Resuming agent', resumedAgentId: AGENT, revivedAgentId: AGENT, pin: { id: AGENT, name: AGENT, ref: 'ref1' } } }),
+    ]);
+  }
+  const oldNotification = () => L.notification('toolu_rs', 'completed', 'Job built').replace('<task-id>t1</task-id>', `<task-id>${AGENT}</task-id>`);
+
   it('(1) a finished subagent with no new writes stays finished and leaves after the grace', () => {
     finishedAgent();
     for (let i = 0; i < 5; i++) {
@@ -651,6 +661,168 @@ describe('ClaudeWatcher — subagent resumed after it finished', () => {
     c.advance(6_000);
     c.poll();
     expect(status()).toBe('done');
+  });
+
+  it('(6) SendMessage resume signal: working at once (inside the settle gap), and through a long tool call', () => {
+    const path = finishedAgent();
+    c.advance(2_000);
+    sendMessage();
+    c.poll();
+    // Before the agent wrote anything: already working.
+    expect(status()).toBe('working');
+    // It writes 2 s after its previous last write (the growth fallback would wait) and starts a long command.
+    appendLines(path, [
+      L.prompt('Also add the reject flow', { agentId: AGENT }),
+      L.assistant([L.tool('b9', 'Bash', { command: 'mvn package' })], { agentId: AGENT, stop: 'tool_use' }),
+    ]);
+    touch(path, c.now());
+    c.poll();
+    expect(status()).toBe('working');
+    for (let i = 0; i < 6; i++) {
+      c.advance(30_000);
+      c.poll();
+      expect(status()).toBe('working');
+    }
+    // The resumed run's own completion notification ends it.
+    appendLines(path, [L.result('b9', 'BUILD SUCCESS', { agentId: AGENT }), L.assistant([L.text('Built.')], { agentId: AGENT, stop: 'end_turn' })]);
+    touch(path, c.now());
+    appendLines(c.transcript(SID), [oldNotification()]);
+    c.poll();
+    expect(status()).toBe('done');
+  });
+
+  it('(6) SendMessage resume signal after removal: re-added at once with the same id and name', () => {
+    finishedAgent();
+    const name = c.office.get(ID)!.name;
+    c.advance(26_000);
+    c.poll();
+    c.advance(1_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    sendMessage();
+    c.poll();
+    expect(c.office.get(ID)).toMatchObject({ id: ID, name, status: 'working' });
+  });
+
+  it('(7) a late duplicate of the OLD completion notification after the resume signal does not end the new run', () => {
+    const path = finishedAgent();
+    c.advance(2_000);
+    sendMessage();
+    c.poll();
+    expect(status()).toBe('working');
+    appendLines(c.transcript(SID), [oldNotification()]);
+    c.poll();
+    expect(status()).toBe('working');
+    // The new run writes, then its own notification ends it.
+    c.advance(2_000);
+    resume(path);
+    c.poll();
+    expect(status()).toBe('working');
+    appendLines(c.transcript(SID), [oldNotification()]);
+    c.poll();
+    expect(status()).toBe('done');
+  });
+
+  it('(8) stopped during a long quiet command, then the interrupted result is written: NOT a resume', () => {
+    c = setup();
+    writeLines(c.transcript(SID), [L.prompt('Build the job', { at: c.now() - 5000 })]);
+    c.openSession(700, SID);
+    c.watcher.boot();
+    appendLines(c.transcript(SID), [
+      L.assistant([L.tool('toolu_rs', 'Agent', { description: 'Build job', subagent_type: 'general-purpose', run_in_background: true })]),
+      L.result('toolu_rs', 'launched', { toolUseResult: { isAsync: true, status: 'async_launched', agentId: AGENT } }),
+    ]);
+    const path = c.subFile(SID, AGENT, { agentType: 'general-purpose', description: 'Build job', toolUseId: 'toolu_rs', requestShape: 'background' }, [
+      L.prompt('Build the job', { agentId: AGENT }),
+      L.assistant([L.tool('b1', 'Bash', { command: 'sleep 999' })], { agentId: AGENT, stop: 'tool_use' }),
+    ]);
+    touch(path, c.now());
+    c.poll();
+    expect(status()).toBe('working');
+    // Quiet for 60 s inside the command, then TaskStop: the completion arrives as "killed".
+    c.advance(60_000);
+    c.poll();
+    expect(status()).toBe('working');
+    appendLines(c.transcript(SID), [L.notification('toolu_rs', 'killed', 'Stopped')]);
+    c.poll();
+    expect(status()).toBe('done');
+    // The interrupted tool_result lands 1 s after the stop was seen (well over 10 s after the last write).
+    appendLines(path, [
+      L.result('b1', 'Interrupted by user', { agentId: AGENT, error: true }),
+      L.prompt('[Request interrupted by user for tool use]', { agentId: AGENT }),
+    ]);
+    touch(path, c.now() + 1_000);
+    for (let i = 0; i < 5; i++) {
+      c.advance(3_000);
+      c.poll();
+      expect(status()).toBe('done');
+    }
+    c.advance(15_000);
+    c.poll();
+    c.advance(1_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+  });
+
+  it('(9) parent session closed: growth of its finished agent is not a resume', () => {
+    const path = finishedAgent();
+    c.closeSession(700);
+    c.poll();
+    c.advance(2_000);
+    c.poll();
+    expect(c.office.get('.claude:700')!.status).toBe('offline');
+    c.advance(15_000);
+    resume(path);
+    for (let i = 0; i < 4; i++) {
+      c.poll();
+      expect(status()).not.toBe('working');
+      c.advance(10_000);
+    }
+  });
+
+  it('(10) boot with an old finished agent, later resumed by growth: comes back working', () => {
+    c = setup();
+    const t0 = c.now() - 20 * 60_000;
+    writeLines(c.transcript(SID), [
+      L.prompt('Build the job', { at: t0 }),
+      L.assistant([L.tool('toolu_rs', 'Agent', { description: 'Build job', subagent_type: 'general-purpose', run_in_background: true })], { at: t0 + 1_000 }),
+      L.result('toolu_rs', 'launched', { at: t0 + 2_000, toolUseResult: { isAsync: true, status: 'async_launched', agentId: AGENT } }),
+      L.notification('toolu_rs', 'completed', 'Job built', { at: t0 + 300_000 }),
+    ]);
+    const path = c.subFile(SID, AGENT, { agentType: 'general-purpose', description: 'Build job', toolUseId: 'toolu_rs', requestShape: 'background' }, [
+      L.prompt('Build the job', { agentId: AGENT, at: t0 + 2_000 }),
+      L.assistant([L.text('Job built.')], { agentId: AGENT, at: t0 + 299_000, stop: 'end_turn' }),
+    ]);
+    touch(path, t0 + 299_000);
+    c.openSession(700, SID);
+    c.watcher.boot();
+    c.office.commit();
+    expect(c.office.has(ID)).toBe(false);
+    c.advance(3_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    resume(path);
+    c.poll();
+    expect(c.office.get(ID)).toMatchObject({ id: ID, status: 'working', title: 'Build job' });
+  });
+
+  it('(11) roster: a run re-added after removal drives its resident again', () => {
+    const path = finishedAgent({ roster: true, agentType: 'talend-developer' });
+    const dev = () => c.agents().find((a) => a.id === 'resident:talend-developer')!;
+    c.advance(26_000);
+    c.poll();
+    c.advance(1_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    expect(dev().status).toBe('idle');
+    c.advance(10_000);
+    resume(path);
+    c.poll();
+    expect(status()).toBe('working');
+    expect(dev().status).toBe('working');
+    expect(dev().title).toBe('Build job');
+    expect(dev().activity?.text).toBe(c.office.get(ID)!.activity?.text);
+    expect(c.agents().some((a) => a.id === ID)).toBe(false);
   });
 });
 

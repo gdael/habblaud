@@ -230,6 +230,23 @@ describe('parseLine — sinais de subagentes', () => {
     expect(r[5].signals).toEqual([{ type: 'stopped', taskId: 'w1' }]);
   });
 
+  it('MTC: SendMessage that resumes a finished agent signals "resumed"; one to a running agent does not', () => {
+    const s = createTranscriptState();
+    const send = { to: 'ag1', message: 'x', summary: 'x', type: 'message', content: 'x', recipient: 'ag1', recipient_kind: 'agent' };
+    const pin = { id: 'ag1', name: 'ag1', ref: 'abc123' };
+    const r = feed(s, [
+      L.assistant([L.tool('toolu_sm1', 'SendMessage', send)]),
+      L.result('toolu_sm1', 'ok', { toolUseResult: { success: true, message: 'Resuming agent', resumedAgentId: 'ag1', revivedAgentId: 'ag1', pin } }),
+      L.assistant([L.tool('toolu_sm2', 'SendMessage', send)]),
+      L.result('toolu_sm2', 'ok', { toolUseResult: { success: true, message: 'Queued', pin } }),
+      L.assistant([L.tool('toolu_sm3', 'SendMessage', send)]),
+      L.result('toolu_sm3', 'failed', { error: true, toolUseResult: { success: false, resumedAgentId: 'ag1' } }),
+    ]);
+    expect(r[1].signals).toEqual([{ type: 'resumed', toolUseId: 'toolu_sm1', agentId: 'ag1' }]);
+    expect(r[3].signals).toEqual([]);
+    expect(r[5].signals).toEqual([]);
+  });
+
   it('fork: a cópia herdada da chamada Agent não vira spawn nem término; a instrução vira o prompt', () => {
     const s = createTranscriptState();
     const r = feed(s, [

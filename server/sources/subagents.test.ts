@@ -23,6 +23,14 @@ describe('resumedAfterFinish', () => {
     expect(resumedAfterFinish(mark, { size: grown, mtimeMs: later }, later + IDLE_TIMEOUT_MS)).toBe(false);
   });
 
+  it('stopped after a long quiet command: a late write right after the observed finish is not a resume', () => {
+    // Last write 60 s before the stop; the stop is observed at `stopAt`; the interrupted result lands 1 s later.
+    const stopAt = mark.mtimeMs + 60_000;
+    const m = { ...mark, finishedAt: stopAt };
+    expect(resumedAfterFinish(m, { size: grown + 2_000, mtimeMs: stopAt + 1_000 }, stopAt + 2_000)).toBe(false);
+    expect(resumedAfterFinish(m, { size: grown, mtimeMs: stopAt + RESUME_SETTLE_MS }, stopAt + RESUME_SETTLE_MS)).toBe(true);
+  });
+
   it('growth past the margin, after the settle window and recent: resumed', () => {
     expect(resumedAfterFinish(mark, { size: grown, mtimeMs: later }, later + 1_000)).toBe(true);
   });

@@ -101,6 +101,19 @@ interface SubTracker {
   state: TranscriptState;
 }
 
+/** MTC: a resumed run of a subagent that had finished. */
+interface ResumeInfo {
+  /** Spawn tool_use id (its finish signals end the resumed run too). */
+  toolUseId?: string;
+  /** When the resume happened: the idle rules count quiet time from here at the earliest. */
+  at: number;
+  /** Transcript of the agent and its size at the resume (explicit live resumes only): a finish
+   * signal is honoured only once the file grew past it, so a late duplicate of the OLD run's
+   * completion notification cannot end the new run before it wrote anything. */
+  path?: string;
+  sizeAt?: number;
+}
+
 interface SessionTracker {
   key: string;
   accountId: string;
@@ -125,11 +138,14 @@ interface SessionTracker {
   /** MTC: agentId -> transcript size/mtime when the subagent was (first) seen finished. */
   finishMarks: Map<string, FinishMark>;
   /**
-   * MTC: subagents finished once and then resumed (transcript grew again, see resumedAfterFinish):
-   * agentId -> the spawn tool_use id. While here, the old finish no longer counts; a new finish
-   * signal for the agent (or completion by the idle rules) ends the resumed run.
+   * MTC: subagents finished once and then resumed: by SendMessage seen in this transcript (signal
+   * 'resumed', applied at once) or, as a fallback, because their transcript grew again (see
+   * resumedAfterFinish). While here, the old finish no longer counts; a new finish signal for the agent
+   * (or completion by the idle rules) ends the resumed run.
+   * Workflow-run agents have no meta toolUseId: their resumed runs end only by the idle rules or a
+   * notification whose task id is the agent id.
    */
-  resumed: Map<string, string | undefined>;
+  resumed: Map<string, ResumeInfo>;
   journals: Map<string, { size: number; agents: Map<string, JournalAgent> }>;
   /** Shells (Bash/Monitor) que o principal e os subagentes desta sessão estão esperando. */
   shells: ShellTracker;
@@ -612,7 +628,7 @@ export class ClaudeWatcher implements AgentSource {
         this.finishTool(t, sig.toolUseId);
         if (sig.agentId) {
           addBounded(t.finishedAgents, sig.agentId);
-          t.resumed.delete(sig.agentId);
+          this.endResume(t, sig.agentId);
         }
         if (sig.runId) addBounded(t.finishedRuns, sig.runId);
         return;
@@ -621,9 +637,12 @@ export class ClaudeWatcher implements AgentSource {
         if (tool) this.finishTool(t, tool);
         // MTC: a resumed agent's completion notification carries the agent id as task id
         // (the tool-use id may be the original spawn's or another one).
-        if (sig.taskId) t.resumed.delete(sig.taskId);
+        if (sig.taskId) this.endResume(t, sig.taskId);
         return;
       }
+      case 'resumed':
+        this.resumeFromSignal(t, sig.agentId, at, live);
+        return;
       case 'stopped': {
         const tool = t.taskToTool.get(sig.taskId);
         if (tool) this.finishTool(t, tool);
@@ -644,8 +663,67 @@ export class ClaudeWatcher implements AgentSource {
     if (l?.agentId) addBounded(t.finishedAgents, l.agentId);
     if (l?.runId) addBounded(t.finishedRuns, l.runId);
     // MTC: a new finish of the spawn tool ends a resumed run of its agent.
-    if (l?.agentId) t.resumed.delete(l.agentId);
-    for (const [agentId, tool] of t.resumed) if (tool === toolUseId) t.resumed.delete(agentId);
+    if (l?.agentId) this.endResume(t, l.agentId);
+    for (const [agentId, r] of [...t.resumed]) if (r.toolUseId === toolUseId) this.endResume(t, agentId);
+  }
+
+  /**
+   * MTC: a finish signal for a resumed agent ends its resumed run, unless it is a late duplicate of
+   * the old run's completion (explicit resume and the transcript has not grown since).
+   */
+  private endResume(t: SessionTracker, agentId: string): void {
+    const r = t.resumed.get(agentId);
+    if (!r) return;
+    if (r.path && r.sizeAt !== undefined) {
+      try {
+        if (statSync(r.path).size <= r.sizeAt) return;
+      } catch {
+        // file gone or unreadable: honour the finish
+      }
+    }
+    t.resumed.delete(agentId);
+  }
+
+  /**
+   * MTC: SendMessage resumed a subagent (seen in this transcript). Applied at once, with no settle gap:
+   * a finished agent still in the office goes back to work; one already removed is re-added by the
+   * next scan. History older than BOOT_RECENT_MS (boot window) is ignored.
+   */
+  private resumeFromSignal(t: SessionTracker, agentId: string, at: number, live: boolean): void {
+    const office = this.opts.office;
+    const now = this.now();
+    if (now - at > BOOT_RECENT_MS) return;
+    if (office.get(t.key)?.status === 'offline') return;
+    const sub = t.subs.get(agentId);
+    const path = sub?.file.path ?? (t.transcriptPath ? join(sessionDirOf(t.transcriptPath), 'subagents', `agent-${agentId}.jsonl`) : undefined);
+    let toolUseId = sub?.meta?.toolUseId;
+    if (!toolUseId) for (const [tool, l] of t.launched) if (l.agentId === agentId) toolUseId = tool;
+    const info: ResumeInfo = { at: live ? now : at };
+    if (toolUseId) info.toolUseId = toolUseId;
+    if (path) {
+      info.path = path;
+      if (live) {
+        try {
+          info.sizeAt = statSync(path).size;
+        } catch {
+          // not written yet: no duplicate guard
+        }
+      }
+    }
+    setBounded(t.resumed, agentId, info);
+    // The finish point is gone: the next finish records a fresh one.
+    t.finishMarks.delete(agentId);
+    t.lastSubScanAt = 0;
+    if (sub && office.has(sub.id) && office.isSubDone(sub.id)) {
+      office.reactivateSub(sub.id);
+      if (office.isSubDone(sub.id)) t.resumed.delete(agentId);
+    }
+  }
+
+  /** MTC: quiet time of a subagent for the idle rules counts from its resume at the earliest. */
+  private lastWriteOf(t: SessionTracker, agentId: string, mtimeMs: number): number {
+    const r = t.resumed.get(agentId);
+    return r ? Math.max(mtimeMs, r.at) : mtimeMs;
   }
 
   // ---------------------------------------------------------------- subagentes
@@ -670,7 +748,7 @@ export class ClaudeWatcher implements AgentSource {
    */
   private markFinished(t: SessionTracker, agentId: string, cur: FinishMark, overwrite = false): void {
     if (!overwrite && t.finishMarks.has(agentId)) return;
-    setBounded(t.finishMarks, agentId, { ...cur });
+    setBounded(t.finishMarks, agentId, { size: cur.size, mtimeMs: cur.mtimeMs, finishedAt: cur.finishedAt ?? this.now() });
   }
 
   /** MTC: a subagent finished by a signal has written again since its finish mark (first sight records it). */
@@ -683,8 +761,11 @@ export class ClaudeWatcher implements AgentSource {
     return resumedAfterFinish(mark, cur, now);
   }
 
+  /** MTC: fallback resume (growth past the finish mark); no duplicate guard, see ResumeInfo. */
   private startResume(t: SessionTracker, agentId: string, meta: SubagentMeta | undefined): void {
-    setBounded(t.resumed, agentId, meta?.toolUseId);
+    const info: ResumeInfo = { at: this.now() };
+    if (meta?.toolUseId) info.toolUseId = meta.toolUseId;
+    setBounded(t.resumed, agentId, info);
   }
 
   private journal(t: SessionTracker, runId: string): Map<string, JournalAgent> {
@@ -739,14 +820,17 @@ export class ClaudeWatcher implements AgentSource {
       }
       const known = t.known.get(file.path);
       if (known === undefined) {
-        if (firstScan && now - mtimeMs > BOOT_RECENT_MS && !this.maybeStillRunning(t, file, now - mtimeMs)) {
+        const resumed = t.resumed.has(file.agentId);
+        if (firstScan && !resumed && now - mtimeMs > BOOT_RECENT_MS && !this.maybeStillRunning(t, file, now - mtimeMs)) {
           t.known.set(file.path, size);
-          // MTC: quiet since before the boot = over; later growth past this mark is a resume.
-          this.markFinished(t, file.agentId, { size, mtimeMs });
+          // MTC: quiet since before the boot = over (finished when last written); later growth past
+          // this mark is a resume.
+          this.markFinished(t, file.agentId, { size, mtimeMs, finishedAt: mtimeMs });
           continue;
         }
         this.openSub(t, file, firstScan ? 'replay' : 'new');
-      } else if (size > known) {
+      } else if (size > known || t.resumed.has(file.agentId)) {
+        // MTC: an explicit resume (SendMessage) re-adds the agent before it writes anything.
         this.openSub(t, file, 'regrown');
       }
     }
@@ -777,6 +861,7 @@ export class ClaudeWatcher implements AgentSource {
       this.openSubUnsafe(t, file, mode);
     } catch (err) {
       // Arquivo problemático: ignora até ele mudar de tamanho de novo.
+      t.resumed.delete(file.agentId);
       try {
         t.known.set(file.path, statSync(file.path).size);
       } catch {
@@ -802,15 +887,21 @@ export class ClaudeWatcher implements AgentSource {
       if (!r.more) break;
     }
     const cur: FinishMark = { size: tail.size, mtimeMs: tail.mtimeMs };
-    // MTC: finished by an old signal but written again (e.g. SendMessage): resumed, not finished.
-    let resumed = false;
+    // MTC: resumed explicitly (SendMessage signal) or, fallback, finished by an old signal but
+    // written again: resumed, not finished.
+    let resumed = t.resumed.has(file.agentId);
     let finished = this.isFinished(t, file, meta);
     if (finished && this.resumeQualifies(t, file.agentId, cur, now)) {
       this.startResume(t, file.agentId, meta);
       resumed = true;
       finished = false;
     }
-    finished ||= mode !== 'new' && concludedByIdle({ now, lastWriteAt: tail.mtimeMs, ended: state.ended, pendingTool: state.pendingTools.size > 0 });
+    const lastWriteAt = this.lastWriteOf(t, file.agentId, tail.mtimeMs);
+    finished ||= mode !== 'new' && concludedByIdle({ now, lastWriteAt, ended: state.ended, pendingTool: state.pendingTools.size > 0 });
+    const spawn = meta?.toolUseId ? t.spawns.get(meta.toolUseId) : undefined;
+    const parentId = spawn && spawn.owner !== t.key && office.has(spawn.owner) && !office.isSubDone(spawn.owner) ? spawn.owner : t.key;
+    // MTC: no resume under a parent that already left (it would come back as a working orphan).
+    if (resumed && office.get(parentId)?.status === 'offline') finished = true;
     if (finished) {
       t.known.set(file.path, tail.size);
       // A resume that already ended moves the mark forward; otherwise the first mark stays.
@@ -818,8 +909,6 @@ export class ClaudeWatcher implements AgentSource {
       this.markFinished(t, file.agentId, cur, resumed);
       return;
     }
-    const spawn = meta?.toolUseId ? t.spawns.get(meta.toolUseId) : undefined;
-    const parentId = spawn && spawn.owner !== t.key && office.has(spawn.owner) && !office.isSubDone(spawn.owner) ? spawn.owner : t.key;
     const journalLabel = file.runId ? this.journal(t, file.runId).get(file.agentId)?.label : undefined;
     const title = meta?.description ?? spawn?.description ?? journalLabel;
     const background = meta?.requestShape ? meta.requestShape !== 'foreground' || !!spawn?.background : !!spawn?.background;
@@ -833,7 +922,10 @@ export class ClaudeWatcher implements AgentSource {
       startedAt: state.firstAt ?? now,
     });
     if (!added) {
+      // Parent missing: remember the file so it is not re-opened every scan (growth re-opens it).
       if (resumed) t.resumed.delete(file.agentId);
+      t.known.set(file.path, tail.size);
+      this.markFinished(t, file.agentId, cur, resumed);
       return;
     }
     t.known.delete(file.path);
@@ -867,7 +959,7 @@ export class ClaudeWatcher implements AgentSource {
         // Já saiu do escritório (período de graça encerrado).
         t.subs.delete(sub.agentId);
         t.known.set(sub.file.path, sub.tail.size);
-        t.resumed.delete(sub.agentId);
+        // A resume signalled meanwhile stays: the scan re-adds the agent.
         this.markFinished(t, sub.agentId, { size: sub.tail.size, mtimeMs: sub.tail.mtimeMs });
         continue;
       }
@@ -900,13 +992,18 @@ export class ClaudeWatcher implements AgentSource {
           // MTC: finished by its spawn's result/notification, then written again (SendMessage).
           this.startResume(t, sub.agentId, sub.meta);
           office.reactivateSub(sub.id);
-          if (office.isSubDone(sub.id)) t.resumed.delete(sub.agentId); // parent gone: stays done
+          if (office.isSubDone(sub.id)) {
+            // Parent gone: stays done; move the mark so this growth is not re-checked every poll.
+            t.resumed.delete(sub.agentId);
+            this.markFinished(t, sub.agentId, cur, true);
+          }
         }
         continue;
       }
+      const lastWriteAt = this.lastWriteOf(t, sub.agentId, sub.tail.mtimeMs);
       const done =
         this.isFinished(t, sub.file, sub.meta) ||
-        concludedByIdle({ now, lastWriteAt: sub.tail.mtimeMs, ended: sub.state.ended, pendingTool: sub.state.pendingTools.size > 0 });
+        concludedByIdle({ now, lastWriteAt, ended: sub.state.ended, pendingTool: sub.state.pendingTools.size > 0 });
       if (done) {
         // MTC: the finish point a later resume is measured from (a resumed run moves it forward).
         t.resumed.delete(sub.agentId);

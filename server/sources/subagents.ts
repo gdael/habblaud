@@ -157,8 +157,10 @@ export function concludedByIdle(c: IdleCheck): boolean {
  */
 export const RESUME_MIN_GROWTH_BYTES = 256;
 /**
- * ...and the new write is this much later than the last write seen at the finish, so a final flush
- * that lands around the completion notification is never taken for a resume.
+ * ...and the new write is this much later than both the last write seen at the finish and the moment
+ * the finish was observed, so a final flush around the completion notification, or the interrupted
+ * tool_result written right after a TaskStop of an agent that was quiet in a long command, is never
+ * taken for a resume.
  */
 export const RESUME_SETTLE_MS = 10_000;
 
@@ -166,16 +168,20 @@ export const RESUME_SETTLE_MS = 10_000;
 export interface FinishMark {
   size: number;
   mtimeMs: number;
+  /** When the watcher saw the finish (clock time); absent on a current-state probe. */
+  finishedAt?: number;
 }
 
 /**
  * MTC: did a finished subagent start writing again? Growth beyond the recorded size by a margin,
- * written clearly after the finish, and recently (within the idle timeout).
+ * written clearly after the finish (last write and observation), and recently (within the idle timeout).
+ * Fallback only: a SendMessage resume seen in the parent transcript is applied at once (signal 'resumed').
  */
 export function resumedAfterFinish(mark: FinishMark, cur: FinishMark, now: number): boolean {
+  const finish = Math.max(mark.mtimeMs, mark.finishedAt ?? 0);
   return (
     cur.size >= mark.size + RESUME_MIN_GROWTH_BYTES &&
-    cur.mtimeMs >= mark.mtimeMs + RESUME_SETTLE_MS &&
+    cur.mtimeMs >= finish + RESUME_SETTLE_MS &&
     now - cur.mtimeMs < IDLE_TIMEOUT_MS
   );
 }
