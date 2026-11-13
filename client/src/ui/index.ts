@@ -21,6 +21,7 @@ import { HelpDialog } from './help';
 import { HistoryPopover } from './history';
 import { Deliveries } from './deliveries';
 import { HoverTip } from './hovertip';
+import { isResidentId } from '../../../shared/timeline';
 import { hasRunningShells } from './model';
 import { hasCodexPermission } from './provider';
 import { Notifier } from './notify';
@@ -197,7 +198,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
     newSession: (cwd, account) => pty.newSession(cwd, account),
     open(id, opener) {
       const readOnly = !!store.snapshot?.meta.terminal && !store.replaying;
-      if (pty.ptyOf(id) || (pty.enabled && !readOnly && ctx.agent(id)?.kind === 'main')) pty.openAgent(id);
+      if (pty.ptyOf(id) || (pty.enabled && !readOnly && ctx.agent(id)?.kind === 'main' && !isResidentId(id))) pty.openAgent(id);
       else {
         pty.close();
         terminal.open(id, opener);
@@ -471,7 +472,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
    */
   function toggleTerminal(): void {
     const id = selection?.type === 'agent' ? selection.id : null;
-    if (id !== null && pty.enabled && ctx.agent(id)?.kind === 'main') return router.toggle(id);
+    if (id !== null && pty.enabled && ctx.agent(id)?.kind === 'main' && !isResidentId(id)) return router.toggle(id);
     if (id === null && pty.isOpen) return pty.close();
     if (terminal.isOpen && (id === null || terminal.agentId === id)) terminal.close();
     else if (id === null) ctx.announce(tr('Selecione um agente para abrir o terminal.'));

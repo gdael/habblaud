@@ -3,7 +3,7 @@
 import type { AccountInfo, Activity, AgentInfo, AgentStatus, Provider } from '../../../shared/types';
 import { h, setAttr, setHidden, setStyleVar, setText, setTitle, setVariant } from './dom';
 import { WORDMARK } from './icons';
-import { shellDoneKind, shellLine, shellStage, statusLabel, type ShellWait } from './model';
+import { roleBadgeText, shellDoneKind, shellLine, shellStage, statusLabel, type ShellWait } from './model';
 import { accountChipLabel, accountProvider, fallbackShort, showsProviderTag } from './provider';
 import { tr } from '../../../shared/i18n';
 
@@ -52,10 +52,10 @@ export function createRoleBadge(): HTMLElement {
   return h('span', { class: 'ui-role' });
 }
 
-export function updateRoleBadge(badge: HTMLElement, agent: Pick<AgentInfo, 'kind' | 'role' | 'background'>): void {
-  setText(badge, agent.kind === 'main' ? tr('Principal') : agent.role || tr('Subagente'));
+export function updateRoleBadge(badge: HTMLElement, agent: Pick<AgentInfo, 'kind' | 'role' | 'background' | 'resident'>): void {
+  setText(badge, roleBadgeText(agent));
   setVariant(badge, 'ui-role--', agent.kind);
-  setTitle(badge, agent.kind === 'main' ? tr('Agente principal') : tr('Subagente: {0}{1}', [agent.role, agent.background ? tr(' (em segundo plano)') : '']));
+  setTitle(badge, agent.resident ? agent.role : agent.kind === 'main' ? tr('Agente principal') : tr('Subagente: {0}{1}', [agent.role, agent.background ? tr(' (em segundo plano)') : '']));
 }
 
 /** Barra de progresso fina; `value` 0–1. */

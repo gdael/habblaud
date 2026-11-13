@@ -1,5 +1,5 @@
 // Chamadas à API do terminal interativo (server/http/pty.ts). Erros viram Error com a mensagem do servidor.
-import { isDemoId } from '../../../shared/timeline';
+import { isDemoId, isResidentId } from '../../../shared/timeline';
 import type { AgentInfo, PtyInfo } from '../../../shared/types';
 import { providerOf } from './provider';
 import { tr } from '../../../shared/i18n';
@@ -9,7 +9,7 @@ import { tr } from '../../../shared/i18n';
  * Codex não tem registro de sessões nem `--resume` aqui, e os agentes do demo não existem de verdade.
  */
 export function ptyControllable(a: Pick<AgentInfo, 'id' | 'kind' | 'provider'> | null | undefined): boolean {
-  return !!a && a.kind === 'main' && providerOf(a) === 'claude' && !isDemoId(a.id);
+  return !!a && a.kind === 'main' && providerOf(a) === 'claude' && !isDemoId(a.id) && !isResidentId(a.id);
 }
 
 export async function postPty<T = unknown>(url: string, body: unknown): Promise<T | undefined> {

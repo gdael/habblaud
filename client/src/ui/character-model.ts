@@ -1,7 +1,7 @@
 // Editor do personagem, parte pura (sem DOM): quando a gaveta oferece a edição, como as peças se agrupam, os rótulos
 // em português e o que vai para o servidor em `parts`. A interface fica em character-editor.ts.
 import { PART_KEYS, type AppearanceParts, type PartKey } from '../../../shared/appearance';
-import { isDemoId } from '../../../shared/timeline';
+import { isDemoId, isResidentId } from '../../../shared/timeline';
 import type { AgentInfo } from '../../../shared/types';
 import type { Appearance } from '../art/api';
 import { tr } from '../../../shared/i18n';
@@ -22,7 +22,7 @@ export interface EditGate {
  * responderia 404) e com acesso local (a trava do terminal).
  */
 export function canEditCharacter(a: Pick<AgentInfo, 'id' | 'kind' | 'status'>, g: EditGate): boolean {
-  return a.kind === 'main' && a.status !== 'offline' && g.live && g.terminal && g.local && !g.replaying && !g.mock && !isDemoId(a.id);
+  return a.kind === 'main' && a.status !== 'offline' && g.live && g.terminal && g.local && !g.replaying && !g.mock && !isDemoId(a.id) && !isResidentId(a.id);
 }
 
 /** Peças que diferem da aparência sorteada pela seed (o que vai em `parts`), na ordem de PART_KEYS. */

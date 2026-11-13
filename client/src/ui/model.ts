@@ -2,6 +2,7 @@
 // Funções puras (sem DOM), testadas em ui/model.test.ts.
 import type { AccountInfo, Activity, AgentInfo, AgentStatus, OfficeSnapshot, RoomInfo, ShellJob, TaskItem } from '../../../shared/types';
 import { formatElapsed, normalizeSearch } from './format';
+import { isResidentId } from '../../../shared/timeline';
 import { tr } from '../../../shared/i18n';
 
 export const STATUS_LABEL: Record<AgentStatus, string> = {
@@ -44,6 +45,16 @@ export function roleLabel(agent: Pick<AgentInfo, 'kind' | 'role'>): string {
   return agent.role || tr('Subagente');
 }
 
+/** Texto do selo de papel: o cargo do residente ("Developer", "Lead"), senão "Principal" ou o tipo do subagente. */
+export function roleBadgeText(agent: Pick<AgentInfo, 'kind' | 'role' | 'resident'>): string {
+  return agent.resident ? agent.role : agent.kind === 'main' ? tr('Principal') : agent.role || tr('Subagente');
+}
+
+/** Há quanto tempo o agente principal (ou residente) está ocioso, em ms; 0 se não está. */
+export function idleForMs(agent: Pick<AgentInfo, 'kind' | 'status' | 'statusSince'>, now: number): number {
+  return agent.kind === 'main' && agent.status === 'idle' && agent.statusSince ? now - agent.statusSince : 0;
+}
+
 /** Agente ainda "presente" (não está indo embora). */
 export function isPresent(agent: Pick<AgentInfo, 'status'>): boolean {
   return agent.status !== 'offline';
@@ -66,9 +77,12 @@ export interface Counters {
 export function computeCounters(snap: Pick<OfficeSnapshot, 'rooms' | 'agents'> | null, now = Date.now()): Counters {
   const c: Counters = { rooms: 0, agents: 0, working: 0, subagents: 0, waiting: 0, shells: 0 };
   if (!snap) return c;
-  c.rooms = snap.rooms.length;
+  // Sala só de residentes ociosos (ids "resident:") não conta.
+  const live = new Set(snap.agents.filter((a) => !(isResidentId(a.id) && a.status === 'idle')).map((a) => a.roomId));
+  const hasResident = new Set(snap.agents.filter((a) => isResidentId(a.id)).map((a) => a.roomId));
+  c.rooms = snap.rooms.filter((r) => live.has(r.id) || !hasResident.has(r.id)).length;
   for (const a of snap.agents) {
-    if (!isPresent(a)) continue;
+    if (!isPresent(a) || (isResidentId(a.id) && a.status === 'idle')) continue;
     c.agents++;
     const wait = shellWaitIn(a, snap.agents, now);
     if (wait) c.shells += Math.max(1, wait.jobs.length);

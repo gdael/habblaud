@@ -4,6 +4,7 @@
 // isso; sem quem entregue (no Docker, o auxiliar do host), a dica é a do `npm run codex:bridge`.
 import { MESSAGE_MAX } from '../../../shared/messages';
 import type { AgentInfo, OutboxStatus, Provider } from '../../../shared/types';
+import { isResidentId } from '../../../shared/timeline';
 import { tr } from '../../../shared/i18n';
 
 /** Dica para quem tem o recurso ligado, mas a sessão do agente não está com o plugin conectado. */
@@ -30,6 +31,7 @@ export interface ComposerEnv {
 export function composerMode(agent: AgentInfo | undefined, env: ComposerEnv): ComposerMode {
   if (env.replaying) return { kind: 'off', text: tr('Sem mensagens no timelapse: o escritório mostrado é o de outro momento') };
   if (agent?.kind === 'sub') return { kind: 'off', text: tr('Subagentes não recebem mensagens: escreva para o agente principal') };
+  if (agent && isResidentId(agent.id)) return { kind: 'off', text: tr('Residente do escritório: sem sessão para receber mensagens') };
   if (!agent || agent.status === 'offline' || agent.status === 'done') return { kind: 'off', text: tr('Sessão encerrada') };
   const codex = agent.provider === 'codex';
   if (!env.enabled) return { kind: 'off', text: codex ? tr('Para responder, use o Codex') : tr('Para responder, use o terminal do Claude Code') };

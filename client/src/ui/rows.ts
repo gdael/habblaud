@@ -3,7 +3,7 @@ import type { AccountInfo, AgentInfo } from '../../../shared/types';
 import { createAvatar, updateAvatar, type AvatarSize } from './avatar';
 import { h, setAttr, setHidden, setStyleVar, setText, setTitle, setVariant } from './dom';
 import { formatDuration } from './format';
-import { activityFallback, shellLine, shellWaitIn, statusLabel } from './model';
+import { activityFallback, idleForMs, shellLine, shellWaitIn, statusLabel } from './model';
 import {
   createAccountChip,
   createActivityLine,
@@ -80,7 +80,7 @@ export function updateAgentRow(
   setTitle(r.task, title);
   setHidden(r.task, !title);
   // Agente principal ocioso há 1 min ou mais: o tempo aparece no lugar do "Principal".
-  const idleFor = agent.kind === 'main' && agent.status === 'idle' && agent.statusSince ? now - agent.statusSince : 0;
+  const idleFor = idleForMs(agent, now);
   const showIdle = idleFor >= 60_000;
   setText(r.since, showIdle ? tr('ocioso {0}', [formatDuration(idleFor)]) : '');
   setTitle(r.since, showIdle ? tr('Ocioso há {0}', [formatDuration(idleFor)]) : '');
@@ -100,6 +100,6 @@ export function updateAgentRow(
   setAttr(
     row,
     'aria-label',
-    `${agent.name}, ${agent.kind === 'main' ? tr('agente principal') : tr('subagente {0}', [agent.role])}, ${account?.name ?? agent.account}${agent.provider === 'codex' ? ' (Codex)' : ''}, ${statusLabel(status)}${doing ? `: ${doing}` : ''}`,
+    `${agent.name}, ${agent.resident ? agent.role : agent.kind === 'main' ? tr('agente principal') : tr('subagente {0}', [agent.role])}, ${account?.name ?? agent.account}${agent.provider === 'codex' ? ' (Codex)' : ''}, ${statusLabel(status)}${doing ? `: ${doing}` : ''}`,
   );
 }

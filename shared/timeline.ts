@@ -231,6 +231,8 @@ export function compactAccount(a: AccountInfo, demo = false): TimelineAccount {
 
 /** Agentes, salas e contas do modo demonstração usam o prefixo "demo:" (ver Office.setDemo). */
 export const isDemoId = (id: string): boolean => id.startsWith('demo:');
+/** MTC resident sem sessão real (id "resident:<id>"); espelha server/model/residents.ts. O Hiraya adotado mantém o id real. */
+export const isResidentId = (id: string): boolean => id.startsWith('resident:');
 
 export function compactSnapshot(snap: OfficeSnapshot, isDemo: (id: string) => boolean = isDemoId): TimelineFrame {
   return {
