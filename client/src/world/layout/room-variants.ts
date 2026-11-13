@@ -62,6 +62,9 @@ export function placeInterior(kind: RoomKind, c: InteriorCtx): boolean {
     case 'server':
       placeServerInterior(c);
       return true;
+    case 'lead':
+      placeLeadInterior(c);
+      return true;
     default:
       return false;
   }
@@ -243,4 +246,56 @@ function placeServerInterior(c: InteriorCtx): void {
   spot('stand', 11, 5, 'up', { dy: -2 });
   spot('stand', 13, 9, 'up', { dy: -2 });
   spot('stand', 9, 3, 'left');
+}
+
+/**
+ * Sala do líder (Hiraya): três mesas de madeira em fila (só três lugares de mesa) sobre um tapete
+ * grande nas cores do tema, estantes (uma ao norte, outra embaixo) e o canto de reunião com mesa e quatro
+ * banquetas para os subagentes visitantes. Pontos em pé extras para quem não achar lugar.
+ */
+function placeLeadInterior(c: InteriorCtx): void {
+  const { furn, seat, spot, rug, pick, theme, north, seed } = c;
+
+  // ---- estação do líder: tapete grande, três mesas (frente) com as mesas de trás como bancada
+  rug(1.2, 3.6, 7.6, 5, shade(theme.carpet2, 0.2), seed + 4);
+  for (let i = 0; i < 3; i++) {
+    const lx = 2 + i * 2;
+    furn('desk_back', lx, 5, 'wood', { order: 0.35 + i * 0.05 });
+    const front = furn('desk', lx, 6, 'wood', { order: 0.4 + i * 0.05, seat: `S${i}` });
+    seat('desk', 'office_chair', lx, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: front, rank: i, side: 'S', order: 0.6 + i * 0.03 });
+  }
+  furn('trash_bin', 8, 6, undefined, { order: 0.7 });
+  furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.41 });
+
+  // ---- canto de reunião (visitantes): mesa de reunião com quatro banquetas
+  furn('meeting_table', 10, 5, undefined, { order: 0.45 });
+  seat('stool', 'stool', 10, 4, 'down', undefined, { order: 0.65 });
+  seat('stool', 'stool', 12, 4, 'down', undefined, { order: 0.66 });
+  seat('stool', 'stool', 10, 7, 'up', undefined, { order: 0.67 });
+  seat('stool', 'stool', 12, 7, 'up', undefined, { order: 0.68 });
+
+  // ---- estante na parede norte (sem cobrir quadro, placa ou janela) e plantas
+  const shelfX = north ? 1 : 4;
+  furn('bookshelf', shelfX, 2, undefined, { order: 0.25 });
+  spot('shelf', shelfX, 3, 'up', { dx: 8, dy: -2 });
+  furn('plant_tall', 14, 2, pick(PLANTS_TALL), { order: 0.2 });
+  if (north) spot('window', 12, 2, 'up', { dx: 12, dy: 1 });
+  else furn('plant_small', 1, 2, pick(PLANTS_SMALL), { order: 0.22 });
+  furn('binder_shelf', 14, 4, undefined, { order: 0.3 });
+  furn('floor_lamp', 14, 5, undefined, { order: 0.31 });
+  furn('plant_tall', 14, 8, pick(PLANTS_TALL), { order: 0.34 });
+
+  // ---- parte de baixo (linhas 9–10; a passagem da porta, colunas 6–9, fica livre)
+  // (a parede de cima tem quadro, placa e relógio: a segunda estante fica encostada embaixo)
+  furn('bookshelf', 1, 10, undefined, { order: 0.2 });
+  furn('filing_cabinet', 3, 10, undefined, { order: 0.21 });
+  furn('plant_tall', 4, 10, pick(PLANTS_TALL), { order: 0.22 });
+  furn('plant_tall', 10, 10, pick(PLANTS_TALL), { order: 0.25 });
+  furn('plant_small', 14, 10, pick(PLANTS_SMALL), { order: 0.27 });
+
+  // pontos em pé para subagentes sem lugar sentado
+  spot('stand', 9, 3, 'left');
+  spot('stand', 1, 8, 'right');
+  spot('stand', 12, 9, 'up', { dy: -2 });
+  spot('stand', 13, 9, 'up', { dy: -2 });
 }

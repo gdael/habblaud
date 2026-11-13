@@ -342,3 +342,24 @@ describe("sala servidor (variante 'server'): parede de monitores", () => {
     expect(a).toBe(b);
   });
 });
+
+describe("sala do líder (variante 'lead'): mesas, reunião e estantes", () => {
+  const rooms = fixtureRooms(FIXTURE.stock);
+  it('invariantes, 3 mesas, 4+ banquetas e 2+ estantes (12 sementes x lados x espelhamento)', () => {
+    for (const r of rooms) {
+      const room = layoutProjectRoom({ id: `/lead/${r.seed}`, slot: r.slot, seed: r.seed, variant: 'lead' }, theme);
+      const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
+      assertRoomInvariants(room);
+      expect(room.spots.filter((s) => s.kind === 'desk'), key).toHaveLength(3);
+      expect(room.spots.filter((s) => s.kind === 'stool' || s.kind === 'nook').length, key).toBeGreaterThanOrEqual(4);
+      expect(room.furniture.filter((f) => f.kind === 'bookshelf').length, key).toBeGreaterThanOrEqual(2);
+      expect(room.furniture.filter((f) => f.kind === 'meeting_table'), key).toHaveLength(1);
+      for (const f of room.furniture) {
+        const fp = FURNITURE[f.kind].footprint;
+        const inside = f.tx >= room.rect.x + 1 && f.tx + fp.w <= room.rect.x + 15 && f.ty >= room.rect.y + 2 && f.ty + fp.h <= room.rect.y + 11;
+        expect(inside, `${key}: ${f.id} fora do piso`).toBe(true);
+      }
+      expect(hiddenWallItems(room), key).toEqual([]);
+    }
+  });
+});
