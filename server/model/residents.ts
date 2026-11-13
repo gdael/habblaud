@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { log, errMsg } from '../log.js';
 import { ROOM_KINDS, type RoomKind } from '../../shared/types.js';
+import { parseAppearanceParts, type AppearanceParts } from '../../shared/appearance.js';
 import { normalizeCwd } from './rooms.js';
 
 
@@ -16,6 +17,8 @@ export interface ResidentDef {
   cwd?: string;
   /** Themed room interior; absent = stock room. */
   room?: RoomKind;
+  /** Fixed character parts (same format as AgentInfo.parts); absent = look from the seed. */
+  appearance?: AppearanceParts;
 }
 
 function str(v: unknown, field: string): string {
@@ -30,7 +33,7 @@ function strList(v: unknown, field: string): string[] {
   return (v as string[]).map((x) => x.trim());
 }
 
-/** Valida o JSON do roster à mão; lança Error nomeando o campo inválido (exceto `room` inválido: aviso e o campo cai). */
+/** Valida o JSON do roster à mão; lança Error nomeando o campo inválido (exceto `room` ou `appearance` inválidos: aviso e o campo cai). */
 export function parseRoster(raw: unknown): ResidentDef[] {
   const list = (raw as { residents?: unknown } | null)?.residents;
   if (!Array.isArray(list)) throw new Error('roster: residents must be an array');
@@ -62,6 +65,13 @@ export function parseRoster(raw: unknown): ResidentDef[] {
       if (typeof r.room !== 'string' || !(ROOM_KINDS as readonly string[]).includes(r.room)) {
         log.warnOnce(`roster-room:${id}:${String(r.room)}`, `roster: ${p}.room must be one of ${ROOM_KINDS.join(', ')}; "${String(r.room)}" ignored (stock room)`);
       } else def.room = r.room as RoomKind;
+    }
+    if (r.appearance !== undefined) {
+      // aparência inválida: só esse campo cai (aparência sorteada pela semente), com um aviso
+      const parts = parseAppearanceParts(r.appearance);
+      if (!parts) {
+        log.warnOnce(`roster-appearance:${id}`, `roster: ${p}.appearance is not a valid set of character parts; ignored (seed look)`);
+      } else def.appearance = parts;
     }
     return def;
   });

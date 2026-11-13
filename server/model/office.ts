@@ -207,6 +207,12 @@ const byStart = (a: ShellJob, b: ShellJob) => a.startedAt - b.startedAt || a.id.
 /** MTC: still in the office as an active agent (not leaving). */
 const isLive = (a: AgentInfo) => a.status !== 'offline' && a.status !== 'done';
 
+/** A resident view wears the roster appearance when there is one, else the seed look (no record parts). */
+function setResidentParts(view: AgentInfo, def: ResidentDef): void {
+  if (def.appearance) view.parts = { ...def.appearance };
+  else delete view.parts;
+}
+
 export class Office {
   private agents = new Map<string, AgentRecord>();
   private rooms = new Map<string, { path: string; createdAt: number }>();
@@ -1076,9 +1082,9 @@ export class Office {
           // `real` already holds copies: a spread is enough.
           view = { ...src, id, kind: 'main', roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
           delete view.parentId;
-          delete view.parts;
           delete view.custom;
           delete view.canMessage;
+          setResidentParts(view, def);
           sources.set(id, src.id);
           active.push(def.id);
         }
@@ -1095,9 +1101,9 @@ export class Office {
         }
         if (src) {
           view = { ...src, roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
-          // Hiraya's look is fixed by the roster: no project-character overrides.
-          delete view.parts;
+          // Hiraya's look is fixed by the roster: no project-character overrides (roster appearance, or the seed).
           delete view.custom;
+          setResidentParts(view, def);
           sources.set(src.id, src.id);
           adoptees.set(def.id, src.id);
           active.push(def.id);
@@ -1122,6 +1128,7 @@ export class Office {
           stats: zeroStats(),
           seed,
           resident: true,
+          ...(def.appearance ? { parts: { ...def.appearance } } : {}),
         },
       );
     }

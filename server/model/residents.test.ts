@@ -391,8 +391,9 @@ describe('residents: overlay no Office', () => {
     expect(office.detail('resident:nope')).toBeUndefined();
   });
 
-  it('adopted Hiraya drops parts and custom (look is fixed)', () => {
-    const { office, now } = makeOffice({ roster: roster() });
+  it('adopted Hiraya drops parts and custom when the roster has no appearance (look is fixed)', () => {
+    const plain = roster().map(({ appearance: _a, ...d }) => d);
+    const { office, now } = makeOffice({ roster: plain });
     office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
     const rec = office.get('acc:1')!;
     rec.custom = true;
@@ -575,5 +576,85 @@ describe('residents: overlay no Office', () => {
     expect(run([])).toEqual(run());
     expect(run([]).rooms).toHaveLength(1);
     expect(run([]).agents).toHaveLength(2);
+  });
+});
+
+describe('residents: appearance', () => {
+  const HIRAYA_ROOM = normalizeCwd('C:/ClaudeCode_v2');
+  const GIRL = { hairStyle: 'pigtails', hair: '#87593a', accessory: 'headphones', accessoryColor: '#35a83f', bottomStyle: 'skirt' } as const;
+  const BOY = { hairStyle: 'spiky', accessory: 'sunglasses', accessoryColor: '#22232b', topStyle: 'jacket', facialHair: 'none' } as const;
+  const custom = () =>
+    parseRoster({
+      residents: [
+        { ...base, id: 'hiraya', name: 'Hiraya', type: 'main', cwd: 'C:/ClaudeCode_v2', look: 'f', appearance: GIRL },
+        { ...base, id: 'makisig', name: 'Makisig', look: 'm', agentTypes: ['makisig'], appearance: BOY },
+        { ...base, id: 'talend-qa', name: 'QA', agentTypes: ['talend-qa'] },
+      ],
+    });
+
+  it('parseRoster accepts a valid appearance', () => {
+    const [d] = parseRoster({ residents: [{ ...base, id: 'a', appearance: { ...GIRL, hair: '#87593A' } }] });
+    expect(d.appearance).toEqual({ ...GIRL });
+  });
+  it('parseRoster drops an invalid appearance with one warning, keeping the rest', () => {
+    const warn = vi.spyOn(log, 'warnOnce').mockImplementation(() => {});
+    const defs = parseRoster({
+      residents: [
+        { ...base, id: 'a', name: 'Ana', room: 'studio', appearance: { hairStyle: 'nope', hair: 'red' } },
+        { ...base, id: 'b', appearance: BOY },
+      ],
+    });
+    expect(defs).toHaveLength(2);
+    expect(defs[0]).toMatchObject({ id: 'a', name: 'Ana', room: 'studio' });
+    expect('appearance' in defs[0]).toBe(false);
+    expect(defs[1].appearance).toEqual({ ...BOY });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][1]).toMatch(/residents\[0\]\.appearance/);
+    warn.mockRestore();
+  });
+  it('Makisig resident (idle and driven by a sub) wears the roster appearance with look m', () => {
+    const { office, now } = makeOffice({ roster: custom() });
+    let mak = office.commit().snapshot.agents.find((a) => a.id === 'resident:makisig')!;
+    expect(mak.parts).toEqual({ ...BOY });
+    expect(mak.look).toBe('m');
+    office.addMain(main('acc:1', '/p/other', now()));
+    office.addSub(sub('s:m', 'acc:1', 'makisig', now()));
+    office.addActivity('s:m', act('m1', now()), true);
+    mak = office.commit().snapshot.agents.find((a) => a.id === 'resident:makisig')!;
+    expect(mak.status).toBe('working');
+    expect(mak.parts).toEqual({ ...BOY });
+    expect(mak.look).toBe('m');
+  });
+  it('Hiraya placeholder and adopted Hiraya both wear the roster appearance', () => {
+    const reach = new Set(['acc:1']);
+    const { office, now } = makeOffice({ roster: custom(), reach });
+    const ph = office.commit().snapshot.agents.find((a) => a.id === 'resident:hiraya')!;
+    expect(ph.parts).toEqual({ ...GIRL });
+    expect(ph.look).toBe('f');
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    const rec = office.get('acc:1')!;
+    rec.custom = true;
+    rec.parts = { hairStyle: 'bald' };
+    const snap = office.commit().snapshot;
+    const hir = snap.agents.find((a) => a.id === 'acc:1')!;
+    expect(hir.name).toBe('Hiraya');
+    expect(hir.roomId).toBe(HIRAYA_ROOM);
+    expect(hir.canMessage).toBe(true);
+    expect(hir.parts).toEqual({ ...GIRL });
+    expect(hir.look).toBe('f');
+    expect(hir.custom).toBeUndefined();
+    expect(snap.agents.some((a) => a.id === 'resident:hiraya')).toBe(false);
+    // The record itself is untouched.
+    expect(office.get('acc:1')!.parts).toEqual({ hairStyle: 'bald' });
+  });
+  it('residents without appearance get no parts', () => {
+    const { office } = makeOffice({ roster: custom() });
+    expect(office.commit().snapshot.agents.find((a) => a.id === 'resident:talend-qa')!.parts).toBeUndefined();
+  });
+  it('shipped roster: Hiraya and Makisig have an appearance, the other four do not', () => {
+    const m = Object.fromEntries(parseRoster(shipped()).map((d) => [d.id, d.appearance]));
+    expect(m.hiraya).toMatchObject({ hairStyle: expect.any(String), accessory: 'headphones' });
+    expect(m.makisig).toMatchObject({ accessory: 'sunglasses' });
+    for (const id of ['talend-designer', 'talend-developer', 'talend-reviewer', 'talend-qa']) expect(m[id]).toBeUndefined();
   });
 });
