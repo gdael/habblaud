@@ -480,39 +480,35 @@ function placeReviewInterior(c: InteriorCtx): void {
 }
 
 /**
- * Laboratório de testes (QA): a mesa do QA (rank 0) e uma segunda mesa (rank 1) de costas para a
- * câmera; atrás delas, uma bancada de aparelhos (celular, tablet, notebook) com um rack de
- * amostras ao lado; no lado leste, sobre um tapete na cor do tema, outra bancada de aparelhos
- * (quem testa fica em pé ao sul, virado para ela), um rack de amostras e uma mesinha com duas
- * banquetas; mais racks de amostras na coluna leste e embaixo. O quadro de checklist é o quadro
- * branco da casca da sala.
+ * Laboratório de testes (QA): uma única mesa (a do QA, rank 0) de costas para a câmera, com racks
+ * de amostras atrás dela; no lado leste, sobre um tapete na cor do tema, uma bancada de testes
+ * comprida (duas bancadas de aparelhos lado a lado, com os aparelhos deitados) com banquetas e
+ * pontos em pé ao sul, virados para ela, e uma mesinha com duas banquetas. Assim a sala não lê como
+ * "mais uma sala de mesas com computador". O quadro de checklist é o quadro branco da casca.
  */
 function placeTestlabInterior(c: InteriorCtx): void {
   const { furn, seat, spot, rug, pick, theme, seed } = c;
 
-  // ---- mesas: a do QA (rank 0) e uma segunda (rank 1), de costas para a câmera; o tapete do
-  // tema sob as mesas é o da casca da sala
-  for (let i = 0; i < 2; i++) {
-    const lx = 2 + i * 2;
-    const desk = furn('desk', lx, 6, theme.deskVariant, { order: 0.4 + i * 0.05, seat: `S${i}` });
-    seat('desk', 'office_chair', lx, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: i, side: 'S', order: 0.6 + i * 0.03 });
-  }
-  furn('trash_bin', 6, 6, undefined, { order: 0.42 });
+  // ---- mesa do QA (rank 0), de costas para a câmera; o tapete do tema sob ela é o da casca
+  const desk = furn('desk', 2, 6, theme.deskVariant, { order: 0.4, seat: 'S0' });
+  seat('desk', 'office_chair', 2, 7, 'up', theme.chairVariant, { dx: TILE / 2, deskId: desk, rank: 0, side: 'S', order: 0.6 });
+  furn('trash_bin', 4, 6, undefined, { order: 0.42 });
   furn('plant_small', 1, 6, pick(PLANTS_SMALL), { order: 0.41 });
 
-  // ---- bancada de aparelhos atrás das mesas (linha 4; a linha 3 fica livre para circular) com
-  // um rack de amostras ao lado; quem testa fica em pé ao sul, virado para a bancada
-  furn('device_bench', 2, 4, undefined, { order: 0.3 });
-  furn('sample_rack', 4, 4, undefined, { order: 0.31 });
-  spot('stand', 2, 5, 'up', { dx: TILE / 2, dy: -2 });
+  // ---- racks de amostras atrás da mesa (linha 4; a linha 3 fica livre para circular)
+  furn('sample_rack', 2, 4, undefined, { order: 0.3 });
+  furn('sample_rack', 3, 4, undefined, { order: 0.31 });
+  spot('stand', 4, 5, 'up', { dy: -2 });
 
-  // ---- lado leste: segunda bancada e um rack de amostras sobre um tapete do tema, e a mesinha
-  // com duas banquetas para conversar sobre os testes
+  // ---- lado leste: bancada de testes comprida (duas bancadas lado a lado) sobre um tapete do
+  // tema; quem testa senta numa banqueta ou fica em pé ao sul, virado para ela
   rug(9.6, 3.6, 4.8, 4.8, shade(theme.carpet2, 0.25), seed + 6);
   furn('device_bench', 10, 4, undefined, { order: 0.32 });
-  furn('sample_rack', 12, 4, undefined, { order: 0.33 });
-  spot('stand', 10, 5, 'up', { dy: -2 });
+  furn('device_bench', 12, 4, undefined, { order: 0.33 });
+  seat('stool', 'stool', 10, 5, 'up', undefined, { order: 0.62 });
   spot('stand', 11, 5, 'up', { dy: -2 });
+  seat('stool', 'stool', 12, 5, 'up', undefined, { order: 0.63 });
+  spot('stand', 13, 5, 'up', { dy: -2 });
   furn('cafe_table', 11, 7, undefined, { order: 0.45 });
   seat('stool', 'stool', 10, 7, 'right', undefined, { order: 0.65 });
   seat('stool', 'stool', 12, 7, 'left', undefined, { order: 0.66 });

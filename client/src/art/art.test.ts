@@ -650,7 +650,7 @@ describe('móveis', () => {
   const DEVICE_BENCH_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.deep, 0.07)];
   const SAMPLE_RACK_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06), ramp(MTC_PALETTE.green, 0.08)];
 
-  it('device_bench: 2x1 do tamanho do footprint, bloqueia, bancada com aparelhos escuros e brilhos verde/branco, só cores MTC, âmbar só de destaque', () => {
+  it('device_bench: 2x1 do tamanho do footprint, bloqueia, bancada baixa com tapete verde e aparelhos deitados (sem tela em pé), brilhos verde/branco, só cores MTC, âmbar só de destaque', () => {
     const def = FURNITURE.device_bench;
     expect(def.mount).toBe('floor');
     expect(def.blocks).toBe(true);
@@ -668,6 +668,13 @@ describe('móveis', () => {
     expect(countColor(s.buf, '#FEC00B')).toBeGreaterThanOrEqual(1);
     expect(amberShare(s.buf)).toBeLessThanOrEqual(0.06);
     expect(offPalette(s.buf, DEVICE_BENCH_RAMPS())).toEqual([]);
+    // tapete antiestático verde sobre o tampo
+    expect(countColor(s.buf, '#4E8E5C')).toBeGreaterThan(40);
+    // tudo deitado: nenhuma tela em pé (nada sobe mais de 10 px acima do footprint; as mesas sobem ~20)
+    let minY = s.buf.h;
+    for (let y = 0; y < s.buf.h && minY === s.buf.h; y++)
+      for (let x = 0; x < s.buf.w; x++) if (s.buf.data[(y * s.buf.w + x) * 4 + 3] > 200) { minY = y; break; }
+    expect(s.buf.oy - minY).toBeLessThanOrEqual(10);
     expect(offPalette(withOffBrandPixel(s.buf), DEVICE_BENCH_RAMPS())).toEqual(['#e2604f']);
   });
 

@@ -901,76 +901,76 @@ export function docStack(): BufFurniture {
 }
 
 /**
- * Bancada de aparelhos (2x1, laboratório de testes do QA, MTC): bancada de laboratório com tampo
- * claro em Mist sobre uma estrutura aberta navy (pés finos, travessa e uma prateleira baixa com
- * caixas Mist; o vão embaixo deixa ver o piso, para não ser confundida com uma mesa ou um armário).
- * Em cima, aparelhos escuros (navy profundo) com brilhos de tela verde e branco: um celular em pé
- * num suporte, um tablet apoiado e um notebook pequeno aberto; na frente, uma régua de carga navy
- * com LEDs verdes (um âmbar, de destaque) e cabos brancos subindo até os aparelhos.
+ * Bancada de aparelhos (2x1, laboratório de testes do QA, MTC): bancada de laboratório baixa, vista
+ * de cima, com tampo de aço em Mist coberto por um tapete antiestático verde, estrutura aberta navy
+ * (pés finos e uma prateleira baixa com caixas etiquetadas; o vão deixa ver o piso). Tudo sobre o
+ * tampo está DEITADO, sem nenhuma tela em pé (para nunca parecer uma mesa com computador): um
+ * tablet deitado, um celular num berço baixo, uma bandeja com aparelhos de teste etiquetados e,
+ * na borda de trás, uma régua de carga navy com uma fileira de LEDs verdes (um âmbar, de destaque),
+ * com cabos brancos até os aparelhos.
  */
 export function deviceBench(): BufFurniture {
-  const s = floorSheet(2, 1, 22);
+  const s = floorSheet(2, 1, 10);
   const b = s.buf;
   const top = ramp(MTC_MIST, 0.06);
   const frame = ramp(MTC_PANEL, 0.07);
   const dev = ramp(MTC_DEEP, 0.07);
-  // Estrutura aberta: pés finos, travessa da frente e prateleira baixa com duas caixas Mist.
+  // Estrutura aberta: pés finos e prateleira baixa com três caixas etiquetadas.
   for (const x of [1, 29]) {
-    b.rect(x, 0, 2, 15, frame.base);
-    b.vline(x, 0, 14, frame.lt);
-    b.vline(x + 1, 0, 14, frame.dk);
+    b.rect(x, 7, 2, 8, frame.base);
+    b.vline(x, 7, 14, frame.lt);
+    b.vline(x + 1, 7, 14, frame.dk);
   }
-  b.rect(3, 9, 26, 2, frame.base);
-  b.hline(3, 28, 9, frame.lt);
-  b.hline(3, 28, 10, frame.dd);
-  for (const [bx, bw] of [[5, 7], [14, 6]] as const) {
-    b.rect(bx, 4, bw, 5, top.base);
-    b.hline(bx, bx + bw - 1, 4, top.lt);
-    b.vline(bx + bw - 1, 5, 8, top.dk);
-    b.hline(bx + 2, bx + bw - 3, 6, MTC_WHITE);
+  b.rect(3, 12, 26, 2, frame.base);
+  b.hline(3, 28, 12, frame.lt);
+  b.hline(3, 28, 13, frame.dd);
+  const bins: [number, number, string, string][] = [
+    [5, 7, top.base, MTC_WHITE],
+    [14, 6, MTC_GREEN, MTC_WHITE],
+    [22, 5, MTC_NAVY, MTC_WHITE],
+  ];
+  for (const [bx, bw, body, label] of bins) {
+    b.rect(bx, 9, bw, 3, body);
+    b.hline(bx + 1, bx + bw - 2, 10, label);
   }
-  // Avental navy sob o tampo e tampo Mist claro com a espessura da borda.
-  b.rect(0, -3, 32, 3, frame.base);
-  b.hline(0, 31, -1, frame.dd);
-  topFace(b, 0, -11, 32, 8, top);
-  b.hline(0, 31, -4, top.dk);
-  // Celular em pé num suporte (esquerda): suporte Mist escuro, aparelho navy profundo.
-  b.rect(3, -6, 6, 2, top.dk);
-  b.vline(7, -9, -6, top.dd);
-  b.rect(4, -17, 5, 10, dev.base);
-  b.hline(4, 8, -17, dev.lt);
-  b.rect(5, -16, 3, 7, dev.dd);
-  b.set(5, -15, MTC_WHITE);
-  b.hline(5, 7, -12, MTC_GREEN);
-  b.set(6, -10, MTC_GREEN);
-  // Tablet apoiado (centro): moldura navy profunda, tela escura com reflexo branco e uma barra verde.
-  b.rect(11, -18, 11, 9, dev.base);
-  b.hline(11, 21, -18, dev.lt);
-  b.vline(21, -17, -10, dev.dk);
-  b.rect(12, -17, 9, 7, dev.dd);
-  b.set(13, -16, MTC_WHITE);
-  b.set(14, -15, MTC_WHITE);
-  b.hline(13, 18, -12, MTC_GREEN);
-  b.hline(13, 16, -14, MTC_SOFT);
-  b.hline(11, 21, -9, dev.dk);
-  // Notebook pequeno aberto (direita): tela com código verde e base navy com teclado Mist.
-  b.rect(23, -17, 8, 7, dev.base);
-  b.hline(23, 30, -17, dev.lt);
-  b.rect(24, -16, 6, 5, dev.dd);
-  b.hline(25, 28, -15, MTC_GREEN);
-  b.hline(25, 27, -13, MTC_SOFT);
-  b.set(28, -13, MTC_WHITE);
-  b.rect(22, -10, 10, 3, frame.base);
-  b.hline(22, 31, -10, frame.lt);
-  b.hline(23, 30, -9, top.base);
-  // Régua de carga navy na frente do tampo: LEDs verdes, um âmbar, e cabos brancos aos aparelhos.
-  b.rect(10, -6, 11, 2, frame.dk);
-  b.hline(10, 20, -6, frame.base);
-  for (const lx of [12, 15, 18]) b.set(lx, -5, MTC_GREEN);
-  b.set(20, -5, MTC_AMBER);
-  b.vline(9, -8, -6, MTC_WHITE);
-  b.vline(16, -8, -7, MTC_WHITE);
-  b.hline(21, 23, -7, MTC_WHITE);
+  // Tampo de aço (Mist) visto de cima, com a espessura da borda da frente.
+  topFace(b, 0, -8, 32, 14, top);
+  b.hline(0, 31, 6, top.dk);
+  b.hline(0, 31, 7, top.dd);
+  // Tapete antiestático verde suave com borda verde (marca de bancada de teste).
+  b.rect(2, -5, 28, 10, MTC_SOFT);
+  b.hline(2, 29, -5, MTC_GREEN);
+  b.hline(2, 29, 4, MTC_GREEN);
+  b.vline(2, -5, 4, MTC_GREEN);
+  b.vline(29, -5, 4, MTC_GREEN);
+  // Régua de carga deitada na borda de trás: corpo navy com uma fileira de LEDs verdes e um âmbar.
+  b.rect(3, -8, 26, 2, frame.dk);
+  b.hline(3, 28, -8, frame.base);
+  for (let lx = 5; lx <= 23; lx += 3) b.set(lx, -7, MTC_GREEN);
+  b.set(26, -7, MTC_AMBER);
+  // Cabos brancos da régua até os aparelhos.
+  b.vline(8, -6, -4, MTC_WHITE);
+  b.vline(18, -6, -4, MTC_WHITE);
+  b.vline(25, -6, -4, MTC_WHITE);
+  // Tablet deitado: corpo navy profundo, tela escura com reflexo branco e uma barra verde.
+  b.rect(4, -3, 10, 7, dev.base);
+  b.hline(4, 13, 3, dev.dk);
+  b.rect(5, -2, 8, 5, dev.dd);
+  b.set(6, -1, MTC_WHITE);
+  b.set(7, -1, MTC_WHITE);
+  b.hline(6, 11, 1, MTC_GREEN);
+  // Celular num berço baixo (Mist escuro), deitado, com um brilho verde na tela.
+  b.rect(16, -3, 5, 7, top.dd);
+  b.rect(17, -2, 3, 5, dev.base);
+  b.set(18, -1, MTC_GREEN);
+  b.set(18, 1, MTC_WHITE);
+  // Bandeja de aparelhos de teste etiquetados (dois aparelhos deitados com etiquetas branca e verde).
+  b.rect(22, -3, 7, 7, top.dk);
+  b.hline(22, 28, 3, top.dd);
+  b.rect(23, -2, 2, 4, dev.base);
+  b.rect(26, -2, 2, 4, dev.base);
+  b.hline(23, 24, -2, MTC_WHITE);
+  b.hline(26, 27, -2, MTC_GREEN);
   b.outline();
   contact(b, 0, 13, 32, 4, 0.2);
   return { base: s };

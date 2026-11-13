@@ -538,7 +538,7 @@ describe("laboratório de testes (variante 'testlab'): bancada de aparelhos e ra
   const rooms = fixtureRooms(FIXTURE.stock);
   const testlab = (slot: number, seed: number) => layoutProjectRoom({ id: `/testlab/${seed}`, slot, seed, variant: 'testlab' }, theme);
 
-  it('invariantes, 1-2 mesas, 1+ bancada de aparelhos, 1+ rack de amostras, quadro e plantas (12 sementes x lados x espelhamento)', () => {
+  it('invariantes, 1 mesa, 2+ bancadas de aparelhos, 1+ rack de amostras, quadro e plantas (12 sementes x lados x espelhamento)', () => {
     // as 12 sementes cobrem os dois espelhamentos e os dois lados
     expect(new Set(rooms.map((r) => `${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`))).toEqual(new Set(['north/false', 'north/true', 'south/false', 'south/true']));
     for (const r of rooms) {
@@ -546,10 +546,9 @@ describe("laboratório de testes (variante 'testlab'): bancada de aparelhos e ra
       const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;
       assertRoomInvariants(room);
       const desks = room.spots.filter((s) => s.kind === 'desk');
-      expect(desks.length, key).toBeGreaterThanOrEqual(1);
-      expect(desks.length, key).toBeLessThanOrEqual(2);
-      expect(desks.map((d) => d.rank).sort(), key).toEqual(desks.length === 2 ? [0, 1] : [0]);
-      expect(room.furniture.filter((f) => f.kind === 'device_bench').length, key).toBeGreaterThanOrEqual(1);
+      // uma única mesa (a do QA): a sala não pode ler como "mais uma sala de mesas com computador"
+      expect(desks.map((d) => d.rank), key).toEqual([0]);
+      expect(room.furniture.filter((f) => f.kind === 'device_bench').length, key).toBeGreaterThanOrEqual(2);
       expect(room.furniture.filter((f) => f.kind === 'device_bench').length, key).toBe(2);
       expect(room.furniture.filter((f) => f.kind === 'sample_rack').length, key).toBe(3);
       expect(room.wallItems.some((w) => w.kind === 'whiteboard'), key).toBe(true);
