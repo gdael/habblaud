@@ -1162,8 +1162,9 @@ export class Office {
 
   /**
    * MTC: how the office shows real agent `id` (feed lines and notices): an absorbed pod sub as its resident (id, name,
-   * room); the adopted Hiraya main as Hiraya (real id kept; a closed adoptee points at whoever stands for Hiraya now);
-   * agents in a main resident's cwd in its pinned room. Without a roster: the agent as is.
+   * room); the main the last build adopted as Hiraya (real id kept; once closed it points at whoever stands for Hiraya
+   * now); agents in a main resident's cwd in its pinned room. A past adoptee keeps its own name. Without a roster: the
+   * agent as is.
    */
   private displayOf(id: string): { id: string; name: string; roomId: string } {
     const info = this.agents.get(id)?.info;
@@ -1180,11 +1181,11 @@ export class Office {
     out.roomId = pinned;
     const def = roster.find((d) => d.type === 'main' && residentRoomId(d) === pinned);
     if (info.kind !== 'main' || !def) return out;
-    const key = roomKey(pinned);
-    const src = this.pickAdoptee(def, this.list().filter((a) => a.kind === 'main' && roomKey(a.roomId) === key));
-    if (src?.id === id) out.name = def.name;
-    else if (!isLive(info) && this.adoptedMains.has(id)) {
-      out.name = def.name;
+    if (this.adoptee.get(def.id) !== id) return out;
+    out.name = def.name;
+    if (!isLive(info)) {
+      const key = roomKey(pinned);
+      const src = this.pickAdoptee(def, this.list().filter((a) => a.kind === 'main' && roomKey(a.roomId) === key));
       out.id = src ? src.id : residentAgentId(def);
     }
     return out;

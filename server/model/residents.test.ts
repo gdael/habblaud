@@ -480,6 +480,22 @@ describe('residents: overlay no Office', () => {
     expect(hir()).toEqual(['acc:2']);
   });
 
+  it('a past adoptee closing keeps its own name in the notice (not Hiraya, not linked to the new adoptee)', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    office.commit();
+    advance(1_000);
+    office.addMain(main('acc:2', 'C:/ClaudeCode_v2', now()));
+    office.setStatus('acc:1', 'idle');
+    expect(office.commit().snapshot.agents.filter((a) => a.name === 'Hiraya').map((a) => a.id)).toEqual(['acc:2']);
+    const realName = office.get('acc:1')!.name;
+    office.closeMain('acc:1');
+    const leave = office.commit().notices.find((n) => n.text.includes('🚪'))!;
+    expect(leave.text).toContain(realName);
+    expect(leave.text).not.toContain('Hiraya');
+    expect(leave.agentId).toBe('acc:1');
+  });
+
   it('idle resident shows idle since its last mirrored run, not since server start', () => {
     const { office, now, advance } = makeOffice({ roster: roster() });
     const start = now();
