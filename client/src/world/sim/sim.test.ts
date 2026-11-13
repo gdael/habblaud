@@ -849,6 +849,31 @@ describe('MTC residents', () => {
     expect(sim.building.spots.some((s) => s.id.startsWith('resident:other'))).toBe(true);
   });
 
+  it('a variant change frees the room spots and re-seats a seated occupant at the new interior', () => {
+    const sim = newSim();
+    const clock = { now: T0 };
+    // studio -> review: os ids dos lugares são sequenciais, então a mesa de rank 0 tem o mesmo id
+    // ('#s0:desk') nas duas salas, mas em outro tile; ninguém pode ficar preso nela
+    const r: RoomInfo = { ...room('resident:other', 0), name: 'Other', variant: 'studio' };
+    const ana = () => agent('ana', 'resident:other', 'working');
+    sim.applySnapshot(snap([r], [ana()]), clock.now);
+    const ch = sim.chars.get('ana')!;
+    run(sim, clock, 60, () => !!ch.homeSpot && ch.atSpot === ch.homeSpot && !ch.step && !ch.queue.length);
+    const old = ch.homeSpot!;
+    expect(ch.atSpot).toBe(old);
+    sim.applySnapshot(snap([{ ...r, variant: 'review' }], [ana()], 2), clock.now);
+    // nada de reserva ou assento preso num id da sala antiga
+    expect(ch.homeSpot).toBeNull();
+    expect(ch.atSpot).toBeNull();
+    expect(ch.seated).toBe(false);
+    expect(sim.spots.ownerOf(old)).toBeUndefined();
+    run(sim, clock, 60, () => !!ch.homeSpot && ch.atSpot === ch.homeSpot && !ch.step && !ch.queue.length);
+    const seat = sim.rooms.get('resident:other')!.layout.spots.find((s) => s.id === ch.homeSpot);
+    expect(seat?.kind).toBe('desk');
+    expect(seat?.rank).toBe(0);
+    expect(ch.atSpot).toBe(ch.homeSpot);
+  });
+
   it('a name-only server room keeps its racks after a slot move', () => {
     const sim = newSim();
     const r: RoomInfo = { ...room('/srv', 0), name: 'Server Network' };

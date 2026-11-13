@@ -10,7 +10,7 @@ import { assembleBuilding, type BuildingLayout } from '../layout/building';
 import { RECEPTION_ID } from '../layout/core';
 import { columnsFor, inRect } from '../layout/geometry';
 import { layoutProjectRoom } from '../layout/room';
-import type { SpotDef, SpotKind } from '../layout/types';
+import type { AreaLayout, SpotDef, SpotKind } from '../layout/types';
 import { PathFinder } from '../path/astar';
 import { BLOCKED, FREE, SEAT } from '../path/grid';
 import { PROGRAM_SEED } from '../social/gathering';
@@ -191,10 +191,14 @@ export class Sim {
       const variantChanged = rs.info.variant !== r.variant;
       rs.info = r;
       if (variantChanged) {
-        // MTC: a new interior kind rebuilds the layout (and the theme, if the legacy server look toggled)
+        // MTC: a new interior kind rebuilds the layout with the room's existing theme (the theme is not
+        // recomputed). Spot ids are sequential, so the new interior can reuse an old id at another tile:
+        // free the room's spots and send its occupants to replan, as moveRoom does.
+        const before = rs.layout;
         rs.layout = layoutProjectRoom({ id: rs.id, slot: rs.slot, seed: rs.seed, variant: this.roomKindOf(r) }, rs.theme);
         rs.version++;
         layoutDirty = true;
+        this.releaseRoomSpots(before);
       }
       if (!rs.listed) {
         rs.listed = true;
@@ -799,6 +803,45 @@ export class Sim {
       }
       if (ch.tempSpots.some((id) => alias.has(id))) touched = true;
       if (touched || (ch.roomId === room.id && ch.standTile) || inRect(before.rect, ch.tx, ch.ty)) {
+        ch.standTile = null;
+        this.interrupt(ch);
+      }
+    }
+  }
+
+  /**
+   * Solta os lugares de um layout que acabou de ser trocado (variante nova na mesma vaga): reservas,
+   * lugar de casa, assento atual e planos que iam para eles. Quem estava sentado levanta onde está
+   * (o relayout tira de cima de móvel) e quem estava na sala refaz o plano, como em `moveRoom`.
+   */
+  private releaseRoomSpots(before: AreaLayout): void {
+    const ids = new Set(before.spots.map((s) => s.id));
+    for (const id of ids) {
+      const owner = this.spots.ownerOf(id);
+      if (owner !== undefined) this.spots.release(id, owner);
+    }
+    for (const ch of this.chars.values()) {
+      if (ch.gone) continue;
+      let touched = false;
+      if (ch.homeSpot && ids.has(ch.homeSpot)) {
+        ch.homeSpot = null;
+        touched = true;
+      }
+      if (ch.atSpot && ids.has(ch.atSpot)) {
+        ch.atSpot = null;
+        ch.seated = false;
+        ch.sortY = null;
+        touched = true;
+      }
+      for (const step of ch.step ? [ch.step, ...ch.queue] : ch.queue) {
+        if (step.t === 'enter' && ids.has(step.spot)) touched = true;
+        else if (step.t === 'go' && inRect(before.rect, step.tx, step.ty)) touched = true;
+      }
+      if (ch.tempSpots.some((id) => ids.has(id))) {
+        ch.tempSpots = ch.tempSpots.filter((id) => !ids.has(id));
+        touched = true;
+      }
+      if (touched || inRect(before.rect, ch.tx, ch.ty)) {
         ch.standTile = null;
         this.interrupt(ch);
       }
