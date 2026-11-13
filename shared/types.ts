@@ -186,6 +186,11 @@ export interface AgentInfo {
    * e perguntou pela caixa de entrada há pouco. Ver POST /api/messages.
    */
   canMessage?: boolean;
+  /**
+   * MTC: permanent resident from the roster (server/model/residents.ts). Id "resident:<id>", always present in its
+   * own pinned room; idle at rest, mirrors the real matching session/subagent while one runs.
+   */
+  resident?: true;
 }
 
 export interface RoomInfo {

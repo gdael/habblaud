@@ -31,6 +31,7 @@ import { hash32 } from '../../shared/hash';
 import { applyPermission } from '../permissions/registry';
 import type { NameStore, StoredCharacter } from './names';
 import { normalizeCwd, roomDisplayNames, SlotAllocator } from './rooms';
+import { isResidentId, matchResident, residentAgentId, residentRoomId, type ResidentDef } from './residents';
 import { tr } from '../../shared/i18n';
 import type { WorldMeta } from '../../shared/world/api';
 
@@ -80,6 +81,8 @@ export interface OfficeDeps {
   ptys?: () => { status: PtyStatus; list: PtyInfo[] };
   /** Habblaud World (WorldService.meta; ver OfficeSnapshot.meta.world). */
   world?: () => WorldMeta;
+  /** MTC: permanent residents (residents.ts) overlaid on the snapshot by build(); absent/empty = stock behaviour. */
+  roster?: ResidentDef[];
   now?: () => number;
 }
 
@@ -192,11 +195,16 @@ class NameSet extends Set<string> {
   }
 }
 
+/** MTC: room id compared regardless of path separator (Windows cwds arrive as "C:\x", the roster says "C:/x"). */
+const roomKey = (id: string) => id.replace(/\\/g, '/');
+
 const byStart = (a: ShellJob, b: ShellJob) => a.startedAt - b.startedAt || a.id.localeCompare(b.id);
 
 export class Office {
   private agents = new Map<string, AgentRecord>();
   private rooms = new Map<string, { path: string; createdAt: number }>();
+  /** MTC: real mains ever adopted by a `main` resident (pruned in build() once they leave the office). */
+  private adoptedMains = new Set<string>();
   private slots = new SlotAllocator(SLOT_COOLDOWN_MS);
   private roomNames = new Map<string, string>();
   private feed: FeedItem[] = [];
@@ -293,10 +301,25 @@ export class Office {
   }
 
   roomName(roomId: string): string {
-    return this.roomNames.get(roomId) ?? roomId.split('/').filter(Boolean).pop() ?? roomId;
+    const named = this.roomNames.get(roomId);
+    if (named !== undefined) return named;
+    // MTC: a resident's virtual room ("resident:<id>") is named after the resident.
+    if (isResidentId(roomId)) {
+      const def = this.deps.roster?.find((d) => residentRoomId(d) === roomId);
+      if (def) return def.name;
+    }
+    return roomId.split('/').filter(Boolean).pop() ?? roomId;
   }
 
   detail(id: string): AgentDetail | undefined {
+    if (isResidentId(id) && this.deps.roster?.length) {
+      // Resident: the run it currently shows (its full history), or the idle template with no history.
+      const o = this.applyResidents(this.realAgents(), this.now());
+      const agent = o.agents.find((a) => a.id === id);
+      if (!agent) return undefined;
+      const src = o.sources.get(id);
+      return { agent: cloneAgent(agent), history: (src && this.agents.get(src)?.history.slice()) || [] };
+    }
     const rec = this.agents.get(id);
     if (rec) return { agent: cloneAgent(rec.info), history: rec.history.slice() };
     const demo = this.demoSnap?.agents.find((a) => a.id === id);
@@ -900,6 +923,10 @@ export class Office {
     for (const [n, room] of this.deps.names.reservedNames(roomId)) {
       if (nameKey(n) === key) return tr('{0} já é o personagem de {1}', [n, this.roomName(room)]);
     }
+    // MTC: resident names are always taken.
+    for (const d of this.deps.roster ?? []) {
+      if (nameKey(d.name) === key) return tr('{0} já está no escritório em {1}', [d.name, this.roomName(residentRoomId(d))]);
+    }
     return undefined;
   }
 
@@ -951,9 +978,114 @@ export class Office {
 
   // ---------------------------------------------------------------- internos
 
+  /** Real agents as the snapshot shows them: copies, with pending permission requests applied. */
+  private realAgents(): AgentInfo[] {
+    const perms = this.deps.permissions?.();
+    return [...this.agents.values()].map((r) => applyPermission(cloneAgent(r.info), perms?.get(r.info.id)));
+  }
+
+  /**
+   * MTC resident overlay (roster in deps.roster). Each resident is a synthetic `kind: 'main'` agent "resident:<id>"
+   * in its own pinned room, idle by default. A `subagent` resident mirrors the newest active real sub whose role
+   * matches it (all matching subs leave the agent list: no elevator visitor); a `main` resident adopts the
+   * earliest-started live real main in its cwd room. `sources` maps resident id -> real agent shown.
+   */
+  private applyResidents(
+    real: AgentInfo[],
+    now: number,
+  ): { agents: AgentInfo[]; rooms: Map<string, { path: string; createdAt: number }>; sources: Map<string, string> } {
+    void now;
+    const roster = this.deps.roster ?? [];
+    const rooms = new Map<string, { path: string; createdAt: number }>();
+    const sources = new Map<string, string>();
+    if (!roster.length) return { agents: real, rooms, sources };
+    const since = this.deps.startedAt;
+    const account = real.find((a) => a.kind === 'main')?.account ?? '';
+    const live = (a: AgentInfo) => a.status !== 'offline' && a.status !== 'done';
+    /** Real agent id -> resident that absorbs it (it leaves the agent list). */
+    const drop = new Map<string, string>();
+    const residents: AgentInfo[] = [];
+    for (const def of roster) {
+      const id = residentAgentId(def);
+      const roomId = residentRoomId(def);
+      rooms.set(roomId, { path: roomId, createdAt: since });
+      const seed = hash32(id);
+      let src: AgentInfo | undefined;
+      if (def.type === 'subagent') {
+        const runs = real.filter((a) => a.kind === 'sub' && matchResident(roster, a.role)?.id === def.id);
+        for (const a of runs) drop.set(a.id, id);
+        for (const a of runs) if (live(a) && (!src || a.lastEventAt > src.lastEventAt)) src = a;
+      } else {
+        const key = roomKey(roomId);
+        const mains = real.filter((a) => a.kind === 'main' && roomKey(a.roomId) === key);
+        src = mains.filter(live).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))[0];
+        if (src) this.adoptedMains.add(src.id);
+        // The adopted session and earlier adoptees on their way out are this resident: no second character.
+        for (const a of mains) if (a === src || (!live(a) && this.adoptedMains.has(a.id))) drop.set(a.id, id);
+      }
+      let view: AgentInfo;
+      if (src) {
+        view = { ...cloneAgent(src), id, kind: 'main', roomId, name: def.name, look: def.look, role: def.role, seed, resident: true };
+        delete view.parentId;
+        delete view.parts;
+        delete view.custom;
+        // Messages and terminal are keyed by the real agent id, which a resident id does not resolve to.
+        delete view.canMessage;
+        sources.set(id, src.id);
+      } else {
+        view = {
+          id,
+          kind: 'main',
+          roomId,
+          name: def.name,
+          look: def.look,
+          role: def.role,
+          sessionId: id,
+          account,
+          status: 'idle',
+          recent: [],
+          tasks: [],
+          startedAt: since,
+          lastEventAt: since,
+          statusSince: since,
+          stats: zeroStats(),
+          seed,
+          resident: true,
+        };
+      }
+      residents.push(view);
+    }
+    // Children of an absorbed agent hang off the resident that absorbed it.
+    // Agents in a main resident's cwd written with the other separator ("C:\\x" vs "C:/x") live in its room.
+    const mainRooms = new Map(roster.filter((d) => d.type === 'main').map((d) => [roomKey(residentRoomId(d)), residentRoomId(d)]));
+    const rest = real
+      .filter((a) => !drop.has(a.id))
+      .map((a) => {
+        const parentId = a.parentId && drop.get(a.parentId);
+        const roomId = mainRooms.get(roomKey(a.roomId));
+        if (!parentId && (!roomId || roomId === a.roomId)) return a;
+        const c = { ...a };
+        if (parentId) c.parentId = parentId;
+        if (roomId) c.roomId = roomId;
+        return c;
+      });
+    return { agents: [...residents, ...rest], rooms, sources };
+  }
+
   private build(): OfficeSnapshot {
     const now = this.now();
-    const entries = new Map(this.rooms);
+    for (const id of this.adoptedMains) if (!this.agents.has(id)) this.adoptedMains.delete(id);
+    const real = this.realAgents();
+    const reach = this.deps.messages?.();
+    // Mensagens pelo escritório: principais presentes cuja sessão está com o plugin conectado. No demo quem decide é
+    // o simulador; com o recurso desligado, ninguém recebe.
+    for (const a of real) if (reach?.has(a.id) && a.kind === 'main' && a.status !== 'offline' && a.status !== 'done') a.canMessage = true;
+    // MTC: residents overlaid on the real agents; `real` (without residents) still drives the session counts below.
+    const overlay = this.applyResidents(real, now);
+    // Resident rooms first: they take slots 0..n-1 and stay pinned (they are in every build, never pruned).
+    const entries = new Map(overlay.rooms);
+    const pinned = new Set([...overlay.rooms.keys()].map(roomKey));
+    for (const [id, r] of this.rooms) if (!pinned.has(roomKey(id))) entries.set(id, r);
     for (const r of this.demoSnap?.rooms ?? []) entries.set(r.id, { path: r.path, createdAt: r.createdAt });
     this.slots.sync(entries.keys(), now);
     const rooms: RoomInfo[] = [...entries]
@@ -971,12 +1103,6 @@ export class Office {
       const effect = this.effects.get(room.id, now) ?? this.demoSnap?.rooms.find((r) => r.id === room.id)?.effect;
       if (effect) room.effect = { ...effect };
     }
-    const perms = this.deps.permissions?.();
-    const real = [...this.agents.values()].map((r) => applyPermission(cloneAgent(r.info), perms?.get(r.info.id)));
-    const reach = this.deps.messages?.();
-    // Mensagens pelo escritório: principais presentes cuja sessão está com o plugin conectado. No demo quem decide é
-    // o simulador; com o recurso desligado, ninguém recebe.
-    for (const a of real) if (reach?.has(a.id) && a.kind === 'main' && a.status !== 'offline' && a.status !== 'done') a.canMessage = true;
     const demoAgents = (this.demoSnap?.agents ?? []).map((a) => {
       if (reach || !a.canMessage) return a;
       const { canMessage: _off, ...rest } = a;
@@ -990,7 +1116,7 @@ export class Office {
       rev: this.rev,
       serverTime: now,
       rooms,
-      agents: [...real, ...demoAgents].map(trim),
+      agents: [...overlay.agents, ...demoAgents].map(trim),
       accounts: [...this.deps.accounts(sessions), ...(this.demoSnap?.accounts ?? [])],
       ...(ptys ? { ptys: ptys.list } : {}),
       meta: {
@@ -1020,6 +1146,8 @@ export class Office {
     }
     for (const a of this.demoSnap?.agents ?? []) used.add(a.name);
     for (const n of this.deps.names.reservedNames().keys()) used.add(n);
+    // MTC: residents' names are never handed to real agents.
+    for (const d of this.deps.roster ?? []) used.add(d.name);
     return used;
   }
 
