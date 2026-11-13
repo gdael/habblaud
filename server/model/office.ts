@@ -204,11 +204,18 @@ const roomKey = (id: string) => {
 
 const byStart = (a: ShellJob, b: ShellJob) => a.startedAt - b.startedAt || a.id.localeCompare(b.id);
 
+/** MTC: still in the office as an active agent (not leaving). */
+const isLive = (a: AgentInfo) => a.status !== 'offline' && a.status !== 'done';
+
 export class Office {
   private agents = new Map<string, AgentRecord>();
   private rooms = new Map<string, { path: string; createdAt: number }>();
   /** MTC: real mains ever adopted by a `main` resident (pruned in build() once they leave the office). */
   private adoptedMains = new Set<string>();
+  /** MTC: current adoptee per `main` resident (resident def id -> real id); written only by build(), keeps adoption sticky. */
+  private adoptee = new Map<string, string>();
+  /** MTC: when each resident last mirrored a run (resident def id -> time); written only by build(). */
+  private lastActive = new Map<string, number>();
   private slots = new SlotAllocator(SLOT_COOLDOWN_MS);
   private roomNames = new Map<string, string>();
   private feed: FeedItem[] = [];
@@ -400,7 +407,8 @@ export class Office {
     if (p.status === 'working') rec.turnStart = now;
     this.agents.set(p.id, rec);
     const acc = this.deps.accountName(p.account);
-    this.notice('arrive', p.id, 'info', tr('👋 {0} chegou em {1}{2}', [info.name, this.roomName(roomId), acc ? ` (${acc})` : '']), roomId);
+    const shown = this.displayOf(p.id);
+    this.notice('arrive', p.id, 'info', tr('👋 {0} chegou em {1}{2}', [shown.name, this.roomName(shown.roomId), acc ? ` (${acc})` : '']), roomId);
     this.markDirty();
   }
 
@@ -439,13 +447,15 @@ export class Office {
     }
     if (reason) info.waitingFor = reason;
     else delete info.waitingFor;
-    const room = this.roomName(info.roomId);
+    // MTC: notices name what the office shows (a resident, not the ghost real agent behind it).
+    const shown = this.displayOf(id);
+    const room = this.roomName(shown.roomId);
 
     if (status === 'working' && (prev === 'idle' || prev === 'shell' || rec.turnStart === undefined)) rec.turnStart = now;
     if (status === 'shell' && prev !== 'shell') {
       // Terminou o turno com shell(s) rodando: o balão (fillShellActivity) e o aviso falam da espera, não de "concluiu".
       const { label } = this.shellSummary(rec);
-      this.notice('shell', id, 'info', tr('⏳ {0} está esperando o shell em {1}{2}', [info.name, room, label ? `: ${label}` : '']), info.roomId, {
+      this.notice('shell', id, 'info', tr('⏳ {0} está esperando o shell em {1}{2}', [shown.name, room, label ? `: ${label}` : '']), info.roomId, {
         dedupeMs: SHELL_NOTICE_DEDUPE_MS,
       });
     }
@@ -461,7 +471,7 @@ export class Office {
         this.addActivity(id, act, true);
         rec.synthWait = prevActivity ? { id: act.id, prev: prevActivity } : { id: act.id };
       }
-      this.notice('wait', id, 'alert', tr('✋ {0} precisa de você em {1}: {2}', [info.name, room, reason]), info.roomId);
+      this.notice('wait', id, 'alert', tr('✋ {0} precisa de você em {1}: {2}', [shown.name, room, reason]), info.roomId);
     }
     if (prev === 'waiting' && status !== 'waiting' && rec.synthWait) {
       // Saiu da espera sem nada novo no transcript: volta a mostrar o que estava fazendo.
@@ -477,7 +487,7 @@ export class Office {
         this.addActivity(id, act, true);
         rec.synthDone = { id: act.id, at: now };
       }
-      this.notice('done', id, 'success', tr('✅ {0} concluiu em {1}', [info.name, room]), info.roomId);
+      this.notice('done', id, 'success', tr('✅ {0} concluiu em {1}', [shown.name, room]), info.roomId);
     }
     this.markDirty();
   }
@@ -552,9 +562,10 @@ export class Office {
     if (outcome === 'ok') act.durationMs = ms;
     this.addActivity(id, act, true, { feed: live });
     if (!live || outcome === 'killed') return;
-    const room = this.roomName(info.roomId);
+    const shown = this.displayOf(id);
+    const room = this.roomName(shown.roomId);
     const text =
-      outcome === 'ok' ? tr('✅ {0}: shell terminou em {1} — {2}', [info.name, room, job.label]) : tr('❌ {0}: shell falhou em {1} — {2}', [info.name, room, job.label]);
+      outcome === 'ok' ? tr('✅ {0}: shell terminou em {1} — {2}', [shown.name, room, job.label]) : tr('❌ {0}: shell falhou em {1} — {2}', [shown.name, room, job.label]);
     this.notice('shellDone', id, outcome === 'ok' ? 'success' : 'warn', text, info.roomId, { dedupeKey: `${id}|shellDone|${job.id}` });
   }
 
@@ -618,7 +629,7 @@ export class Office {
       }
       sub.removeAt = Math.min(sub.removeAt ?? Infinity, rec.removeAt);
     }
-    this.notice('leave', id, 'info', tr('🚪 {0} encerrou a sessão', [info.name]), info.roomId);
+    this.notice('leave', id, 'info', tr('🚪 {0} encerrou a sessão', [this.displayOf(id).name]), info.roomId);
     this.markDirty();
   }
 
@@ -675,9 +686,9 @@ export class Office {
       this.addActivity(id, act, true);
     }
     if (opts.notify !== false) {
-      const parent = info.parentId ? this.agents.get(info.parentId)?.info : undefined;
+      const parent = info.parentId && this.agents.has(info.parentId) ? this.displayOf(info.parentId) : undefined;
       const what = info.title ? `“${info.title}”` : tr('o trabalho');
-      this.notice('deliver', id, 'success', tr('📦 {0} entregou {1} para {2}', [info.name, what, parent?.name ?? tr('o agente principal')]), info.roomId);
+      this.notice('deliver', id, 'success', tr('📦 {0} entregou {1} para {2}', [this.displayOf(id).name, what, parent?.name ?? tr('o agente principal')]), info.roomId);
     }
     this.markDirty();
   }
@@ -761,12 +772,14 @@ export class Office {
     if (activity.kind === 'prompt') rec.turnStart = activity.at;
     // `filler` (só preenche o balão do personagem) nunca vai para o feed.
     if (!opts.filler) {
+      // MTC: the feed names (and links to) what the office shows: the resident, not the real agent behind it.
+      const shown = this.displayOf(id);
       const item: FeedItem = {
         id: activity.id,
-        agentId: id,
-        roomId: info.roomId,
-        agentName: info.name,
-        roomName: this.roomName(info.roomId),
+        agentId: shown.id,
+        roomId: shown.roomId,
+        agentName: shown.name,
+        roomName: this.roomName(shown.roomId),
         account: info.account,
         activity,
       };
@@ -798,8 +811,9 @@ export class Office {
   noticePermission(id: string, what: string, kind: 'permission' | 'question' = 'permission'): void {
     const info = this.agents.get(id)?.info;
     if (!info) return;
-    const room = this.roomName(info.roomId);
-    const text = kind === 'question' ? tr('❓ {0} tem uma pergunta em {1}: {2}', [info.name, room, what]) : tr('🔐 {0} pede permissão em {1}: {2}', [info.name, room, what]);
+    const shown = this.displayOf(id);
+    const room = this.roomName(shown.roomId);
+    const text = kind === 'question' ? tr('❓ {0} tem uma pergunta em {1}: {2}', [shown.name, room, what]) : tr('🔐 {0} pede permissão em {1}: {2}', [shown.name, room, what]);
     this.notice('wait', id, 'alert', text, info.roomId);
     this.markDirty();
   }
@@ -1009,25 +1023,28 @@ export class Office {
    * MTC resident overlay (roster in deps.roster). Each `subagent` resident is a synthetic `kind: 'main'` agent
    * "resident:<id>" in its own pinned room, idle by default; it mirrors the newest active real sub whose role matches
    * it (all matching subs leave the agent list: no elevator visitor; their children hang off the resident). A `main`
-   * resident adopts the earliest-started live real main in its cwd room: that agent KEEPS its real id (messages,
-   * terminal and editor still resolve) and only gets the resident's name/look/role/seed; with none, an idle
-   * placeholder "resident:<id>" stands in. `sources` maps the shown agent id -> real agent id; `adopted` lists the
-   * real mains adopted now (only build() records them).
+   * resident adopts one live real main in its cwd room (pickAdoptee: newest activity, sticky): that agent KEEPS its
+   * real id (messages, terminal and editor still resolve) and only gets the resident's name/look/role/seed; with none,
+   * an idle placeholder "resident:<id>" stands in, idle since the resident's last run. `sources` maps the shown agent
+   * id -> real agent id; `adoptees` (resident def id -> real id) and `active` (resident def ids showing a run) are
+   * recorded only by build().
    */
   private applyResidents(real: AgentInfo[]): {
     agents: AgentInfo[];
     rooms: Map<string, { path: string; createdAt: number }>;
     sources: Map<string, string>;
-    adopted: string[];
+    adoptees: Map<string, string>;
+    active: string[];
   } {
     const roster = this.deps.roster ?? [];
     const rooms = new Map<string, { path: string; createdAt: number }>();
     const sources = new Map<string, string>();
-    const adopted: string[] = [];
-    if (!roster.length) return { agents: real, rooms, sources, adopted };
+    const adoptees = new Map<string, string>();
+    const active: string[] = [];
+    if (!roster.length) return { agents: real, rooms, sources, adoptees, active };
     const since = this.deps.startedAt;
     const account = real.find((a) => a.kind === 'main')?.account ?? '';
-    const live = (a: AgentInfo) => a.status !== 'offline' && a.status !== 'done';
+    const live = isLive;
     // Resident each real sub belongs to (matched once per agent).
     const subOf = new Map<string, string>();
     for (const a of real) {
@@ -1063,11 +1080,12 @@ export class Office {
           delete view.custom;
           delete view.canMessage;
           sources.set(id, src.id);
+          active.push(def.id);
         }
       } else {
         const key = roomKey(roomId);
         const mains = real.filter((a) => a.kind === 'main' && roomKey(a.roomId) === key);
-        const src = mains.filter(live).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))[0];
+        const src = this.pickAdoptee(def, mains);
         // Earlier adoptees on their way out are this resident too: no second character.
         for (const a of mains) {
           if (a === src || (!live(a) && this.adoptedMains.has(a.id))) {
@@ -1081,7 +1099,8 @@ export class Office {
           delete view.parts;
           delete view.custom;
           sources.set(src.id, src.id);
-          adopted.push(src.id);
+          adoptees.set(def.id, src.id);
+          active.push(def.id);
         }
       }
       residents.push(
@@ -1098,8 +1117,8 @@ export class Office {
           recent: [],
           tasks: [],
           startedAt: since,
-          lastEventAt: since,
-          statusSince: since,
+          lastEventAt: this.lastActive.get(def.id) ?? since,
+          statusSince: this.lastActive.get(def.id) ?? since,
           stats: zeroStats(),
           seed,
           resident: true,
@@ -1119,7 +1138,56 @@ export class Office {
         if (roomId) c.roomId = roomId;
         return c;
       });
-    return { agents: [...residents, ...rest], rooms, sources, adopted };
+    return { agents: [...residents, ...rest], rooms, sources, adoptees, active };
+  }
+
+  /**
+   * MTC: the live main a `main` resident adopts among `mains` (its room's mains): the current adoptee (sticky) unless
+   * it is idle while another live main works (then the newest working one); with no current adoptee, the live main
+   * with the newest activity. undefined = none live.
+   */
+  private pickAdoptee(def: ResidentDef, mains: AgentInfo[]): AgentInfo | undefined {
+    const live = mains.filter(isLive);
+    if (!live.length) return undefined;
+    const newest = (list: AgentInfo[]) =>
+      list.reduce((b, a) => (a.lastEventAt > b.lastEventAt || (a.lastEventAt === b.lastEventAt && a.id.localeCompare(b.id) < 0) ? a : b));
+    const cur = live.find((a) => a.id === this.adoptee.get(def.id));
+    if (cur) {
+      if (cur.status !== 'idle') return cur;
+      const working = live.filter((a) => a.status === 'working');
+      return working.length ? newest(working) : cur;
+    }
+    return newest(live);
+  }
+
+  /**
+   * MTC: how the office shows real agent `id` (feed lines and notices): an absorbed pod sub as its resident (id, name,
+   * room); the adopted Hiraya main as Hiraya (real id kept; a closed adoptee points at whoever stands for Hiraya now);
+   * agents in a main resident's cwd in its pinned room. Without a roster: the agent as is.
+   */
+  private displayOf(id: string): { id: string; name: string; roomId: string } {
+    const info = this.agents.get(id)?.info;
+    const roster = this.deps.roster ?? [];
+    if (!info) return { id, name: id, roomId: '' };
+    const out = { id, name: info.name, roomId: info.roomId };
+    if (!roster.length) return out;
+    if (info.kind === 'sub') {
+      const def = matchResident(roster, info.role);
+      if (def?.type === 'subagent') return { id: residentAgentId(def), name: def.name, roomId: residentRoomId(def) };
+    }
+    const pinned = this.mainResidentRooms().get(roomKey(info.roomId));
+    if (!pinned) return out;
+    out.roomId = pinned;
+    const def = roster.find((d) => d.type === 'main' && residentRoomId(d) === pinned);
+    if (info.kind !== 'main' || !def) return out;
+    const key = roomKey(pinned);
+    const src = this.pickAdoptee(def, this.list().filter((a) => a.kind === 'main' && roomKey(a.roomId) === key));
+    if (src?.id === id) out.name = def.name;
+    else if (!isLive(info) && this.adoptedMains.has(id)) {
+      out.name = def.name;
+      out.id = src ? src.id : residentAgentId(def);
+    }
+    return out;
   }
 
   /** MTC: roomKey -> pinned room id of each `main` resident. */
@@ -1146,7 +1214,15 @@ export class Office {
     for (const a of real) if (reach?.has(a.id) && a.kind === 'main' && a.status !== 'offline' && a.status !== 'done') a.canMessage = true;
     // MTC: residents overlaid on the real agents; `real` (without residents) still drives the session counts below.
     const overlay = this.applyResidents(real);
-    for (const id of overlay.adopted) this.adoptedMains.add(id);
+    for (const d of this.deps.roster ?? []) {
+      if (d.type !== 'main') continue;
+      const src = overlay.adoptees.get(d.id);
+      if (src) {
+        this.adoptedMains.add(src);
+        this.adoptee.set(d.id, src);
+      } else this.adoptee.delete(d.id);
+    }
+    for (const id of overlay.active) this.lastActive.set(id, now);
     // Resident rooms first: they take slots 0..n-1 and stay pinned (they are in every build, never pruned).
     const entries = new Map(overlay.rooms);
     const pinned = new Set([...overlay.rooms.keys()].map(roomKey));
@@ -1287,6 +1363,13 @@ export class Office {
     const n: Notice = { id: `n-${now.toString(36)}-${++this.seq}`, level, text, at: now };
     if (kind !== 'room') n.agentId = key;
     if (roomId) n.roomId = roomId;
+    // MTC: point at what the office shows (resident id/room) instead of a hidden real agent.
+    const info = kind !== 'room' ? this.agents.get(key)?.info : undefined;
+    if (info && this.deps.roster?.length) {
+      const shown = this.displayOf(key);
+      n.agentId = shown.id;
+      if (roomId === info.roomId) n.roomId = shown.roomId;
+    }
     this.pendingNotices.push(n);
   }
 }

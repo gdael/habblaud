@@ -401,6 +401,103 @@ describe('residents: overlay no Office', () => {
     expect(room.effect).toBeDefined();
   });
 
+  it('feed and notices of a mirrored pod run name the resident; the clicked id is in the snapshot', () => {
+    const { office, now } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', '/p/other', now()));
+    office.commit();
+    office.addSub(sub('s:qa', 'acc:1', 'talend-qa', now(), 'Run QA'));
+    office.addActivity('s:qa', act('q1', now()), true);
+    let r = office.commit();
+    const item = r.feed.find((f) => f.id === 'q1')!;
+    expect(item.agentName).toBe('QA');
+    expect(item.agentId).toBe('resident:talend-qa');
+    expect(item.roomId).toBe('resident:talend-qa');
+    expect(item.roomName).toBe('QA');
+    expect(r.snapshot.agents.some((a) => a.id === item.agentId)).toBe(true);
+    expect(r.snapshot.rooms.some((x) => x.id === item.roomId)).toBe(true);
+    office.completeSub('s:qa');
+    r = office.commit();
+    const deliver = r.notices.find((n) => n.text.includes('📦'))!;
+    expect(deliver.text).toContain('QA');
+    expect(deliver.text).not.toContain(office.get('s:qa')!.name);
+    expect(deliver.agentId).toBe('resident:talend-qa');
+    expect(deliver.roomId).toBe('resident:talend-qa');
+  });
+
+  it('feed and notices of the adopted Hiraya name Hiraya and keep its real id', () => {
+    const { office, now } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:\\ClaudeCode_v2', now()));
+    office.commit();
+    const realName = office.get('acc:1')!.name;
+    office.addActivity('acc:1', act('h1', now()), true);
+    office.setStatus('acc:1', 'waiting', 'ok?');
+    let r = office.commit();
+    const item = r.feed.find((f) => f.id === 'h1')!;
+    expect(item.agentName).toBe('Hiraya');
+    expect(item.agentId).toBe('acc:1');
+    expect(item.roomId).toBe(HIRAYA_ROOM);
+    const wait = r.notices.find((n) => n.text.includes('✋'))!;
+    expect(wait.text).toContain('Hiraya');
+    expect(wait.text).not.toContain(realName);
+    expect(wait.roomId).toBe(HIRAYA_ROOM);
+    office.closeMain('acc:1');
+    r = office.commit();
+    const leave = r.notices.find((n) => n.text.includes('🚪'))!;
+    expect(leave.text).toContain('Hiraya');
+    expect(leave.agentId).toBe('resident:hiraya');
+    expect(r.snapshot.agents.some((a) => a.id === leave.agentId)).toBe(true);
+  });
+
+  it('Hiraya adopts the live main with the newest activity, not the earliest started', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    advance(1_000);
+    office.addMain(main('acc:2', 'C:/ClaudeCode_v2', now()));
+    advance(1_000);
+    office.addActivity('acc:2', act('b1', now()), true);
+    const snap = office.commit().snapshot;
+    expect(snap.agents.filter((a) => a.name === 'Hiraya').map((a) => a.id)).toEqual(['acc:2']);
+    expect(snap.agents.find((a) => a.id === 'acc:1')!.resident).toBeUndefined();
+  });
+
+  it('adoption is sticky while the adoptee works; switches when it idles and another main works', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    office.addMain(main('acc:1', 'C:/ClaudeCode_v2', now()));
+    const hir = () => office.commit().snapshot.agents.filter((a) => a.name === 'Hiraya').map((a) => a.id);
+    expect(hir()).toEqual(['acc:1']);
+    advance(1_000);
+    office.addMain(main('acc:2', 'C:/ClaudeCode_v2', now()));
+    office.addActivity('acc:2', act('b1', now()), true);
+    // acc:1 still working: stays Hiraya even though acc:2 is newer.
+    expect(hir()).toEqual(['acc:1']);
+    // acc:1 idles while acc:2 works: Hiraya moves to acc:2.
+    office.setStatus('acc:1', 'idle');
+    expect(hir()).toEqual(['acc:2']);
+    // both idle, acc:1 newer: still sticky to acc:2.
+    office.setStatus('acc:2', 'idle');
+    advance(1_000);
+    office.addActivity('acc:1', act('a9', now()), true);
+    expect(hir()).toEqual(['acc:2']);
+  });
+
+  it('idle resident shows idle since its last mirrored run, not since server start', () => {
+    const { office, now, advance } = makeOffice({ roster: roster() });
+    const start = now();
+    const qa = () => office.commit().snapshot.agents.find((a) => a.id === 'resident:talend-qa')!;
+    expect(qa().statusSince).toBe(start);
+    advance(60_000);
+    office.addMain(main('acc:1', '/p/other', now()));
+    office.addSub(sub('s:qa', 'acc:1', 'talend-qa', now()));
+    expect(qa().status).toBe('working');
+    const ranAt = now();
+    advance(5_000);
+    office.completeSub('s:qa');
+    const idle = qa();
+    expect(idle.status).toBe('idle');
+    expect(idle.statusSince).toBe(ranAt);
+    expect(idle.statusSince).toBeGreaterThan(start);
+  });
+
   it('empty roster: snapshot identical to stock', () => {
     const run = (r?: ResidentDef[]) => {
       const { office, now } = makeOffice(r ? { roster: r } : {});
