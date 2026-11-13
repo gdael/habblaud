@@ -1,7 +1,7 @@
 // Renomear uma sala (botão direito na sala, na lista lateral ou no escritório): um campo flutuante perto do clique.
 // O nome fica no servidor (POST /api/rooms/rename, model/room-aliases.ts) e vale para todas as abas; vazio volta ao
 // nome da pasta. Enter salva, Esc cancela, clicar fora salva. A gaveta da sala tem também um lápis ao lado do nome.
-import { isDemoId } from '../../../shared/timeline';
+import { isDemoId, isResidentId } from '../../../shared/timeline';
 import type { UiContext } from './context';
 import { h, setText } from './dom';
 import { access } from '../net/access';
@@ -18,6 +18,8 @@ export function canRenameRoom(ctx: UiContext, roomId: string): boolean {
   return (
     !!ctx.renameRoom &&
     !isDemoId(roomId) &&
+    // MTC: a pod resident's virtual room is named after the resident.
+    !isResidentId(roomId) &&
     !ctx.store.mock &&
     !ctx.store.replaying &&
     !!ctx.store.snapshot?.meta.terminal &&

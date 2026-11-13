@@ -85,6 +85,7 @@ export const ES: Readonly<Record<string, string>> = {
   "Cavanhaque": "Perilla",
 
   // client/src/ui/composer-model.ts
+  "Residente do escritório: sem sessão para receber mensagens": "Residente de la oficina: sin sesión para recibir mensajes",
   "Para mandar mensagens daqui: npm run mod:install (plugin habblaud-mensagens)": "Para enviar mensajes desde aquí: npm run mod:install (plugin habblaud-mensagens)",
   "Para mandar mensagens ao Codex: com o Habblaud no Docker, deixe npm run codex:bridge rodando; no modo Node funciona sozinho": "Para enviar mensajes a Codex: con Habblaud en Docker, deja npm run codex:bridge en ejecución; en modo Node funciona solo",
   "Sem mensagens no timelapse: o escritório mostrado é o de outro momento": "Sin mensajes en el timelapse: la oficina que ves es de otro momento",

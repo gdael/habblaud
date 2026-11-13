@@ -6,6 +6,9 @@ import { canEditCharacter } from './character-model';
 import { roomPathLabel } from './format';
 import { computeCounters, idleForMs, isTabPeer, roleBadgeText } from './model';
 import { ptyControllable } from './ptyapi';
+import { canRenameRoom } from './roomrename';
+import { loadAccess } from '../net/access';
+import type { UiContext } from './context';
 
 function agent(p: Partial<AgentInfo> & Pick<AgentInfo, 'id' | 'roomId'>): AgentInfo {
   return {
@@ -50,6 +53,20 @@ describe('residents', () => {
     const h = agent({ id: '.claude:42', roomId: 'v2', resident: true, canMessage: true });
     expect(ptyControllable(h)).toBe(true);
     expect(composerMode(h, { enabled: true, local: true, replaying: false })).toEqual({ kind: 'ready' });
+  });
+
+  it('the editor is never offered on a resident, not even the adopted Hiraya (real id)', () => {
+    const gate = { live: true, terminal: true, local: true, replaying: false, mock: false };
+    expect(canEditCharacter(agent({ id: '.claude:42', roomId: 'v2', resident: true }), gate)).toBe(false);
+    expect(canEditCharacter(agent({ id: '.claude:42', roomId: 'v2' }), gate)).toBe(true);
+  });
+
+  it('resident rooms cannot be renamed', async () => {
+    const ok = { ok: true, status: 200, json: async () => ({ remote: false, local: true, permissions: true, messages: true, terminal: true }) };
+    await loadAccess((async () => ok) as unknown as typeof fetch);
+    const ctx = { renameRoom: () => {}, store: { mock: false, replaying: false, snapshot: { meta: { terminal: true } } } } as unknown as UiContext;
+    expect(canRenameRoom(ctx, '/p/real')).toBe(true);
+    expect(canRenameRoom(ctx, 'resident:talend-qa')).toBe(false);
   });
 
   it('badge shows role for residents, Principal otherwise', () => {

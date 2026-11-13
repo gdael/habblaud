@@ -21,8 +21,9 @@ export interface EditGate {
  * O lápis "Editar personagem" aparece? Só para o principal real, ao vivo, que não está saindo (offline: o servidor
  * responderia 404) e com acesso local (a trava do terminal).
  */
-export function canEditCharacter(a: Pick<AgentInfo, 'id' | 'kind' | 'status'>, g: EditGate): boolean {
-  return a.kind === 'main' && a.status !== 'offline' && g.live && g.terminal && g.local && !g.replaying && !g.mock && !isDemoId(a.id) && !isResidentId(a.id);
+export function canEditCharacter(a: Pick<AgentInfo, 'id' | 'kind' | 'status' | 'resident'>, g: EditGate): boolean {
+  // MTC: residents (incl. the adopted Hiraya, which keeps its real id) have a fixed roster look.
+  return a.kind === 'main' && a.status !== 'offline' && g.live && g.terminal && g.local && !g.replaying && !g.mock && !isDemoId(a.id) && !isResidentId(a.id) && !a.resident;
 }
 
 /** Peças que diferem da aparência sorteada pela seed (o que vai em `parts`), na ordem de PART_KEYS. */
