@@ -1,5 +1,5 @@
 // Integração: registro + transcript + subagentes em um config dir temporário.
-import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentInfo, Notice } from '../../shared/types';
@@ -7,6 +7,7 @@ import { AccountsService } from '../accounts/service';
 import { setQuiet } from '../log';
 import { NameStore } from '../model/names';
 import { Office } from '../model/office';
+import { parseRoster, type ResidentDef } from '../model/residents';
 import { appendLines, L, tempDir, writeLines } from '../test/fixtures';
 import { ClaudeWatcher, encodeCwd } from './watcher';
 
@@ -14,7 +15,7 @@ setQuiet(true);
 
 const CWD = '/projetos/loja';
 
-function setup(opts: { tailBytes?: number } = {}) {
+function setup(opts: { tailBytes?: number; roster?: ResidentDef[] } = {}) {
   const tmp = tempDir();
   const home = tmp.dir;
   const dir = join(home, '.claude');
@@ -38,6 +39,7 @@ function setup(opts: { tailBytes?: number } = {}) {
     sources: () => [],
     accountName: (id) => accounts.find(id)?.detected.name,
     now,
+    ...(opts.roster ? { roster: opts.roster } : {}),
   });
   late.office = office;
   const alive = new Set<number>();
@@ -462,6 +464,193 @@ describe('ClaudeWatcher', () => {
     const texts = c.notices.map((n) => n.text);
     expect(texts).toContain('🏗️ Nova sala: loja');
     expect(texts).toContain(`👋 ${a.name} chegou em loja (Conta A)`);
+  });
+});
+
+// MTC: a background subagent resumed with SendMessage after it finished writes to the same
+// agent-<id>.jsonl; its original spawn tool_use is long finished, so only the file growth tells.
+describe('ClaudeWatcher — subagent resumed after it finished', () => {
+  const SHIPPED = new URL('../../../habblaud-mtc/roster.json', import.meta.url);
+  let c: Ctx;
+  afterEach(() => {
+    c.watcher.stop();
+    c.tmp.cleanup();
+  });
+
+  const SID = 'sess-r';
+  const AGENT = 'rs1';
+  const ID = `${SID}:${AGENT}`;
+  /** Sets the file mtime (the watcher compares it with its fake clock). */
+  const touch = (path: string, atMs: number) => utimesSync(path, atMs / 1000, atMs / 1000);
+  const status = () => c.office.get(ID)?.status;
+
+  /** Background agent spawned, worked, wrote its last turn and got its completion notification. */
+  function finishedAgent(opts: { roster?: boolean; agentType?: string } = {}): string {
+    c = setup(opts.roster ? { roster: parseRoster(JSON.parse(readFileSync(SHIPPED, 'utf8'))) } : {});
+    writeLines(c.transcript(SID), [L.prompt('Build the job', { at: c.now() - 5000 })]);
+    c.openSession(700, SID);
+    c.watcher.boot();
+    appendLines(c.transcript(SID), [
+      L.assistant([L.tool('toolu_rs', 'Agent', { description: 'Build job', subagent_type: opts.agentType ?? 'general-purpose', run_in_background: true })]),
+      L.result('toolu_rs', 'launched', { toolUseResult: { isAsync: true, status: 'async_launched', agentId: AGENT } }),
+    ]);
+    const path = c.subFile(SID, AGENT, { agentType: opts.agentType ?? 'general-purpose', description: 'Build job', toolUseId: 'toolu_rs', requestShape: 'background' }, [
+      L.prompt('Build the job', { agentId: AGENT }),
+      L.assistant([L.tool('g1', 'Grep', { pattern: 'tMap' })], { agentId: AGENT }),
+    ]);
+    touch(path, c.now());
+    c.poll();
+    c.advance(2_000);
+    c.poll();
+    expect(status()).toBe('working');
+    appendLines(path, [L.result('g1', 'jobs/load.item', { agentId: AGENT }), L.assistant([L.text('Job built.')], { agentId: AGENT, stop: 'end_turn' })]);
+    touch(path, c.now());
+    appendLines(c.transcript(SID), [L.notification('toolu_rs', 'completed', 'Job built')]);
+    c.poll();
+    expect(status()).toBe('done');
+    return path;
+  }
+
+  /** SendMessage resumes the agent: a new user message and work appended now. */
+  function resume(path: string): void {
+    appendLines(path, [
+      L.prompt('Also add the reject flow', { agentId: AGENT }),
+      L.assistant([L.tool('r9', 'Read', { file_path: `${CWD}/jobs/load.item` })], { agentId: AGENT, stop: 'tool_use' }),
+    ]);
+    touch(path, c.now());
+  }
+
+  it('(1) a finished subagent with no new writes stays finished and leaves after the grace', () => {
+    finishedAgent();
+    for (let i = 0; i < 5; i++) {
+      c.advance(4_000);
+      c.poll();
+      expect(status()).toBe('done');
+    }
+    c.advance(10_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    for (let i = 0; i < 5; i++) {
+      c.advance(10_000);
+      c.poll();
+      expect(c.office.has(ID)).toBe(false);
+    }
+  });
+
+  it('(2) growth after the finish brings it back working with the same id and name', () => {
+    const path = finishedAgent();
+    const name = c.office.get(ID)!.name;
+    c.advance(15_000);
+    resume(path);
+    c.poll();
+    expect(c.office.get(ID)).toMatchObject({ id: ID, name, status: 'working' });
+    expect(c.agent(ID)!.activity?.text).toBe('Lendo load.item');
+  });
+
+  it('(2) with the resident roster, the resumed run mirrors on its resident', () => {
+    const path = finishedAgent({ roster: true, agentType: 'talend-developer' });
+    const dev = () => c.agents().find((a) => a.id === 'resident:talend-developer')!;
+    expect(dev().status).toBe('idle');
+    c.advance(15_000);
+    resume(path);
+    c.poll();
+    expect(status()).toBe('working');
+    expect(dev().status).toBe('working');
+    expect(dev().title).toBe('Build job');
+  });
+
+  it('(3) the resumed run completes again by end_turn + quiet and does not flap', () => {
+    const path = finishedAgent();
+    c.advance(15_000);
+    resume(path);
+    c.poll();
+    expect(status()).toBe('working');
+    c.advance(2_000);
+    appendLines(path, [
+      L.result('r9', 'file text', { agentId: AGENT }),
+      L.assistant([L.text('Reject flow added.')], { agentId: AGENT, stop: 'end_turn' }),
+    ]);
+    touch(path, c.now());
+    c.poll();
+    expect(status()).toBe('working');
+    c.advance(6_000);
+    c.poll();
+    expect(status()).toBe('done');
+    for (let i = 0; i < 4; i++) {
+      c.advance(4_000);
+      c.poll();
+      expect(status()).toBe('done');
+    }
+    c.advance(15_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    for (let i = 0; i < 4; i++) {
+      c.advance(10_000);
+      c.poll();
+      expect(c.office.has(ID)).toBe(false);
+    }
+  });
+
+  it('(3) the resumed run completes again with a new completion notification (task id = agent id)', () => {
+    const path = finishedAgent();
+    c.advance(15_000);
+    resume(path);
+    c.poll();
+    expect(status()).toBe('working');
+    c.advance(3_000);
+    const note = L.notification('toolu_other', 'completed', 'Reject flow added').replace('<task-id>t1</task-id>', `<task-id>${AGENT}</task-id>`);
+    appendLines(c.transcript(SID), [note]);
+    c.poll();
+    expect(status()).toBe('done');
+    c.advance(3_000);
+    c.poll();
+    expect(status()).toBe('done');
+  });
+
+  it('(4) a late write right around the completion notification is not a resume', () => {
+    const path = finishedAgent();
+    const finishedAt = statSync(path).mtimeMs;
+    // Final flush lands just after the notification (within the settle window).
+    appendLines(path, [
+      L.assistant([L.text('Summary for the parent: job built, 3 components.')], { agentId: AGENT, stop: 'end_turn' }),
+      L.raw('system', { subtype: 'turn_duration', agentId: AGENT }),
+    ]);
+    touch(path, finishedAt + 1_000);
+    for (let i = 0; i < 5; i++) {
+      c.advance(3_000);
+      c.poll();
+      expect(status()).toBe('done');
+    }
+    c.advance(15_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    c.advance(5_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+  });
+
+  it('(5) a resumed agent already removed after the grace is re-added with the same id and name', () => {
+    const path = finishedAgent();
+    const name = c.office.get(ID)!.name;
+    c.advance(26_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    c.advance(1_000);
+    c.poll();
+    c.advance(30_000);
+    c.poll();
+    expect(c.office.has(ID)).toBe(false);
+    resume(path);
+    c.poll();
+    expect(c.office.get(ID)).toMatchObject({ id: ID, name, status: 'working', kind: 'sub', title: 'Build job', background: true });
+    // ...and finishes again by the normal rules.
+    c.advance(1_000);
+    appendLines(path, [L.result('r9', 'ok', { agentId: AGENT }), L.assistant([L.text('Done.')], { agentId: AGENT, stop: 'end_turn' })]);
+    touch(path, c.now());
+    c.poll();
+    c.advance(6_000);
+    c.poll();
+    expect(status()).toBe('done');
   });
 });
 
