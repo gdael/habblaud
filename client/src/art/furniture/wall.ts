@@ -5,7 +5,7 @@ import { rectAt, wallSheet, type BufFurniture } from '../core/sprite';
 import { ACCENTS, M, book, foliage, glass, mug, pick, pot, rngOf, smallSucculent } from './kit';
 
 /** Sombra suave projetada na parede (abaixo/direita do objeto). */
-function wallShadow(b: import('../core/pixbuf').PixelBuf, x: number, y: number, w: number, h: number): void {
+export function wallShadow(b: import('../core/pixbuf').PixelBuf, x: number, y: number, w: number, h: number): void {
   for (let yy = y + 1; yy <= y + h; yy++) b.under(x + w, yy, 'rgba(30,34,52,0.16)');
   for (let xx = x + 1; xx <= x + w; xx++) b.under(xx, y + h, 'rgba(30,34,52,0.16)');
 }

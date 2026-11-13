@@ -386,6 +386,9 @@ describe("estúdio (variante 'studio'): pranchetas e moodboard", () => {
   const studio = (slot: number, seed: number) => layoutProjectRoom({ id: `/studio/${seed}`, slot, seed, variant: 'studio' }, theme);
 
   it('invariantes, 1-2 mesas, 2+ pranchetas, 1 moodboard e quadro (12 sementes x lados x espelhamento)', () => {
+    // as 12 sementes cobrem os dois espelhamentos e os dois lados
+    expect(new Set(rooms.map((r) => roomVariant(r.seed).mirror)).size).toBe(2);
+    expect(new Set(rooms.map((r) => slotSide(r.slot))).size).toBe(2);
     for (const r of rooms) {
       const room = studio(r.slot, r.seed);
       const key = `${r.key} ${slotSide(r.slot)}/${roomVariant(r.seed).mirror}`;

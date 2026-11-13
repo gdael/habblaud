@@ -10,7 +10,9 @@ import { PixelBuf } from './core/pixbuf';
 import type { BufSprite } from './core/sprite';
 import { drawBoard, drawClock, drawScreen, drawWindowView } from './dynamic';
 import { normalizeFurniture, renderFurniture } from './furniture/index';
-import { draftingBoard, monitorWall, moodboard } from './furniture/office';
+import { MTC_PALETTE, draftingBoard, monitorWall, moodboard } from './furniture/office';
+import { M } from './furniture/kit';
+import { outlineFor, parseColor, ramp, type Ramp } from './core/color';
 import { ICON_NAMES, iconTemplates, renderIcon } from './icons';
 import { CHUNK_PX, floorChunk } from './surfaces/floor';
 import { southWallTile, wallFaceTile } from './surfaces/walls';
@@ -498,30 +500,31 @@ describe('móveis', () => {
   });
 
   /**
-   * Pixels opacos fora da paleta MTC: neutros (pouca saturação: branco, Mist, contornos) passam;
-   * os saturados precisam ter o matiz do navy, do verde ou do âmbar da marca.
+   * Cores opacas do buffer que não estão no conjunto permitido (lista exata). O conjunto vem das
+   * mesmas constantes e chamadas de `ramp()` que o sprite usa, mais o contorno (`outlineFor`) de
+   * cada uma dessas cores (o `outline()` do buffer só produz isso).
    */
-  function offBrand(buf: PixelBuf): string[] {
-    const HUES = [224, 125, 133, 45];
+  function offPalette(buf: PixelBuf, ramps: readonly Ramp[]): string[] {
+    const base = new Set<string>(Object.values(MTC_PALETTE).map((c) => c.toLowerCase()));
+    for (const r of ramps) for (const c of Object.values(r)) base.add(c.toLowerCase());
+    const allowed = new Set(base);
+    for (const c of base) {
+      const [r, g, b] = parseColor(c);
+      allowed.add(outlineFor(r, g, b).toLowerCase());
+    }
     const out = new Set<string>();
     for (let i = 0; i < buf.data.length; i += 4) {
       if (buf.data[i + 3] <= 200) continue;
-      const [r, g, b] = [buf.data[i] / 255, buf.data[i + 1] / 255, buf.data[i + 2] / 255];
-      const mx = Math.max(r, g, b);
-      const mn = Math.min(r, g, b);
-      const l = (mx + mn) / 2;
-      const d = mx - mn;
-      const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-      if (sat < 0.25 || l < 0.06 || l > 0.94) continue;
-      let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      h = (h * 60 + 360) % 360;
-      if (HUES.some((hh) => Math.min(Math.abs(h - hh), 360 - Math.abs(h - hh)) <= 18)) continue;
-      out.add(`rgb(${buf.data[i]},${buf.data[i + 1]},${buf.data[i + 2]}) h${Math.round(h)} s${sat.toFixed(2)}`);
+      const hex = `#${[buf.data[i], buf.data[i + 1], buf.data[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+      if (!allowed.has(hex)) out.add(hex);
     }
     return [...out];
   }
+  const DRAFTING_RAMPS = (): Ramp[] => [M.oak, M.oakDark, ramp(MTC_PALETTE.panel, 0.07), ramp(MTC_PALETTE.mist, 0.06)];
+  const MOODBOARD_RAMPS = (): Ramp[] => [ramp(MTC_PALETTE.navy, 0.07), ramp(MTC_PALETTE.mist, 0.07)];
 
-  it('drafting_board: folha do tamanho do footprint, com pixels, prancheta navy com traços verdes e só cores MTC', () => {
+
+  it('drafting_board: folha do tamanho do footprint, com pixels, papel com blueprint navy e traços verdes e só cores MTC/madeira do kit', () => {
     const def = FURNITURE.drafting_board;
     expect(def.mount).toBe('floor');
     expect(def.blocks).toBe(true);
@@ -533,7 +536,7 @@ describe('móveis', () => {
     expect(s.buf.countOpaque()).toBeGreaterThan(200);
     expect(countColor(s.buf, '#0A1F54')).toBeGreaterThan(20);
     expect(countColor(s.buf, '#35A83F') + countColor(s.buf, '#4E8E5C')).toBeGreaterThan(0);
-    expect(offBrand(s.buf)).toEqual([]);
+    expect(offPalette(s.buf, DRAFTING_RAMPS())).toEqual([]);
   });
 
   it('moodboard: item de parede do tamanho do footprint, com amostras das cores MTC e só cores MTC', () => {
@@ -546,7 +549,7 @@ describe('móveis', () => {
     expect(s.ay).toBe(s.buf.oy);
     expect(s.buf.countOpaque()).toBeGreaterThan(200);
     for (const hex of ['#0A1F54', '#1E2C5D', '#35A83F', '#4E8E5C', '#A9AEC4']) expect(countColor(s.buf, hex), hex).toBeGreaterThan(0);
-    expect(offBrand(s.buf)).toEqual([]);
+    expect(offPalette(s.buf, MOODBOARD_RAMPS())).toEqual([]);
   });
 
   it('normaliza variantes, estados e sementes', () => {

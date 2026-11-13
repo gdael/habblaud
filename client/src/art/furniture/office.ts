@@ -9,6 +9,7 @@ import {
   papers, pencilCup, photoFrame, pick, pot, rngOf, smallSucculent, staticScreen, topFace, underRect, woodGrain,
   type DeskItemTone,
 } from './kit';
+import { wallShadow } from './wall';
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -510,85 +511,97 @@ export function monitorWall(seed: number): BufFurniture {
 }
 
 // Cores da marca MTC (skill mtc-presentation-theme) usadas nos móveis do estúdio do Designer.
-const MTC_NAVY = '#0a1f54';
-const MTC_PANEL = '#1e2c5d';
-const MTC_DEEP = '#041d56';
-const MTC_GREEN = '#35a83f';
-const MTC_SOFT = '#4e8e5c';
-const MTC_MIST = '#a9aec4';
-const MTC_AMBER = '#fec00b';
-const MTC_WHITE = '#ffffff';
+// Exportadas para o teste de paleta derivar as cores permitidas das mesmas constantes.
+export const MTC_PALETTE = {
+  navy: '#0a1f54',
+  panel: '#1e2c5d',
+  deep: '#041d56',
+  green: '#35a83f',
+  soft: '#4e8e5c',
+  mist: '#a9aec4',
+  amber: '#fec00b',
+  white: '#ffffff',
+} as const;
+const MTC_NAVY = MTC_PALETTE.navy;
+const MTC_PANEL = MTC_PALETTE.panel;
+const MTC_DEEP = MTC_PALETTE.deep;
+const MTC_GREEN = MTC_PALETTE.green;
+const MTC_SOFT = MTC_PALETTE.soft;
+const MTC_MIST = MTC_PALETTE.mist;
+const MTC_AMBER = MTC_PALETTE.amber;
+const MTC_WHITE = MTC_PALETTE.white;
 
 /**
- * Prancheta de desenho (2x1, estúdio do Designer, MTC): tampo inclinado (a borda de trás mais alta
- * e mais estreita, com a lateral do tampo à mostra) sobre dois cavaletes em X navy. Em cima, uma
- * folha de blueprint navy com grade, fachada em traço branco e cotas/marcas verdes, a régua T
- * branca atravessando a folha, o aparador com um lápis âmbar (único destaque) e uma luminária
- * articulada de cúpula verde. Só cores da marca.
+ * Prancheta de desenho (2x1, estúdio do Designer, MTC): mesa larga e baixa com o tampo de madeira
+ * bem inclinado (a borda de trás, mais alta, aparece mais estreita, e a lateral direita mostra a
+ * cunha da inclinação), uma folha de papel branco com um retângulo de blueprint navy e linhas
+ * verdes, a régua T em Mist, o aparador de lápis na borda da frente (lápis âmbar) e um porta-lápis
+ * navy. Pés navy simples com travessa. Madeira só pelas rampas do kit (M.oak/M.oakDark).
  */
 export function draftingBoard(): BufFurniture {
-  const s = floorSheet(2, 1, 24);
+  const s = floorSheet(2, 1, 16);
   const b = s.buf;
-  const frame = ramp(MTC_PANEL, 0.07);
-  const edge = ramp(MTC_MIST, 0.06);
-  // Cavaletes em X (dois de cada lado) com a travessa entre eles.
-  for (const x0 of [2, 22]) {
-    b.line(x0, 2, x0 + 7, 14, frame.base);
-    b.line(x0 + 7, 2, x0, 14, frame.lt);
-    b.hline(x0 - 1, x0 + 1, 14, frame.dk);
-    b.hline(x0 + 6, x0 + 8, 14, frame.dk);
+  const top = M.oak;
+  const lip = M.oakDark;
+  const legs = ramp(MTC_PANEL, 0.07);
+  const rule = ramp(MTC_MIST, 0.06);
+  // Pés (só os da frente aparecem sob o tampo) com sapatas e travessa.
+  for (const x of [2, 28]) {
+    b.rect(x, 7, 2, 8, legs.base);
+    b.vline(x, 7, 14, legs.lt);
+    b.hline(x - 1, x + 2, 15, legs.dk);
   }
-  b.rect(9, 7, 14, 1, frame.dk);
-  // Tampo inclinado: a borda de trás (norte) é mais estreita e fica mais alta; as laterais
-  // mostram a espessura do tampo em Mist escuro.
-  const top = -15;
-  const bot = 0;
-  for (let y = top; y <= bot; y++) {
-    const inset = Math.round(((bot - y) / (bot - top)) * 3);
-    b.hline(inset, 31 - inset, y, edge.lt);
-    b.set(inset, y, edge.dk);
-    b.set(31 - inset, y, edge.dd);
+  b.hline(4, 27, 12, legs.dk);
+  // Cunhas da inclinação nas duas laterais (a borda de trás é a mais alta): a espessura do tampo
+  // e o suporte aparecem como triângulos de madeira escura que somem na frente.
+  for (let y = -10; y <= 5; y++) {
+    const inset = Math.round(((5 - y) / 15) * 3);
+    const depth = Math.round(((5 - y) / 15) * 7);
+    if (depth <= 0) continue;
+    b.vline(Math.max(0, inset - 1), y + 1, y + depth, lip.dk);
+    b.vline(31 - inset, y + 1, y + depth, lip.dd);
   }
-  b.hline(3, 28, top, edge.hi);
-  b.rect(0, bot + 1, 32, 2, edge.dk);
-  b.hline(0, 31, bot + 1, edge.base);
-  // Folha de blueprint navy com grade (linhas do painel) e cantos com fita branca.
-  const sx = 5;
-  const sy = -13;
-  const sw = 22;
-  const sh = 12;
-  b.rect(sx, sy, sw, sh, MTC_NAVY);
-  for (let y = sy + 3; y < sy + sh; y += 4) b.hline(sx, sx + sw - 1, y, MTC_PANEL);
-  for (let x = sx + 3; x < sx + sw; x += 4) b.vline(x, sy, sy + sh - 1, MTC_PANEL);
-  for (const [x, y] of [[sx, sy], [sx + sw - 1, sy], [sx, sy + sh - 1], [sx + sw - 1, sy + sh - 1]] as const) b.set(x, y, MTC_WHITE);
-  // Fachada em traço branco: telhado em duas águas, paredes e uma janela.
-  b.line(sx + 2, sy + 5, sx + 7, sy + 1, MTC_WHITE);
-  b.line(sx + 7, sy + 1, sx + 12, sy + 5, MTC_WHITE);
-  b.vline(sx + 3, sy + 5, sy + 9, MTC_WHITE);
-  b.vline(sx + 11, sy + 5, sy + 9, MTC_WHITE);
-  b.hline(sx + 3, sx + 11, sy + 9, MTC_WHITE);
-  b.rect(sx + 6, sy + 6, 2, 2, MTC_SOFT);
-  // Cotas e marcas verdes ao lado do desenho.
-  b.vline(sx + 15, sy + 1, sy + 9, MTC_GREEN);
-  b.set(sx + 14, sy + 1, MTC_GREEN);
-  b.set(sx + 14, sy + 9, MTC_GREEN);
-  b.line(sx + 17, sy + 2, sx + 20, sy + 5, MTC_GREEN);
-  b.hline(sx + 17, sx + 20, sy + 8, MTC_SOFT);
-  // Régua T branca atravessando a folha (cabeça na borda esquerda do tampo).
-  b.hline(2, 28, sy + sh - 2, MTC_WHITE);
-  b.hline(3, 28, sy + sh - 1, edge.base);
-  b.rect(1, sy + sh - 4, 2, 5, MTC_WHITE);
-  // Aparador de lápis na frente, com um lápis âmbar.
-  b.hline(1, 30, bot + 3, edge.dd);
-  b.hline(8, 13, bot + 2, MTC_AMBER);
-  b.set(7, bot + 2, MTC_DEEP);
-  // Luminária articulada presa no canto de trás: braço Mist, cúpula verde.
-  b.line(27, top - 1, 24, top - 5, edge.dk);
-  b.line(24, top - 5, 19, top - 3, edge.dk);
-  b.rect(17, top - 3, 4, 2, MTC_GREEN);
-  b.hline(17, 20, top - 3, MTC_SOFT);
+  // Tampo inclinado: trapézio (atrás 3..28, na frente 0..30), madeira clara com veio suave.
+  const yt = -10;
+  const yb = 5;
+  for (let y = yt; y <= yb; y++) {
+    const inset = Math.round(((yb - y) / (yb - yt)) * 3);
+    b.hline(inset, 30 - inset, y, (y - yt) % 5 === 2 ? top.base : top.lt);
+  }
+  b.hline(3, 27, yt, top.hi);
+  // Borda da frente: aparador de lápis (lábio de madeira escura) com um lápis âmbar.
+  b.hline(0, 30, yb + 1, lip.base);
+  b.hline(0, 30, yb + 2, lip.dk);
+  b.hline(5, 10, yb + 1, MTC_AMBER);
+  b.set(4, yb + 1, MTC_DEEP);
+  // Folha de papel branco (um pouco à esquerda), com sombra de madeira escura.
+  const px = 5;
+  const py = -8;
+  const pw = 19;
+  const ph = 11;
+  b.rect(px, py, pw, ph, MTC_WHITE);
+  b.vline(px + pw, py + 1, py + ph, top.dk);
+  b.hline(px + 1, px + pw, py + ph, top.dk);
+  // Retângulo de blueprint navy com dois traços brancos e as linhas verdes ao lado.
+  b.rect(px + 2, py + 2, 8, 6, MTC_NAVY);
+  b.hline(px + 3, px + 8, py + 4, MTC_PANEL);
+  b.vline(px + 6, py + 3, py + 6, MTC_WHITE);
+  b.hline(px + 3, px + 5, py + 6, MTC_WHITE);
+  b.hline(px + 12, px + 17, py + 2, MTC_GREEN);
+  b.hline(px + 12, px + 16, py + 4, MTC_SOFT);
+  b.hline(px + 12, px + 17, py + 6, MTC_GREEN);
+  // Régua T: lâmina Mist atravessando o papel e a cabeça encostada na borda esquerda do tampo.
+  b.hline(2, 26, py + ph - 2, rule.base);
+  b.hline(2, 26, py + ph - 1, rule.dk);
+  b.rect(1, py + ph - 5, 2, 6, rule.lt);
+  b.vline(2, py + ph - 5, py + ph, rule.dk);
+  // Porta-lápis navy no canto da frente, com lápis verde e âmbar.
+  b.rect(25, 0, 3, 4, MTC_NAVY);
+  b.vline(25, 0, 3, MTC_PANEL);
+  b.vline(26, -2, -1, MTC_GREEN);
+  b.vline(27, -3, -1, MTC_AMBER);
   b.outline();
-  contact(b, 1, 12, 30, 4, 0.2);
+  contact(b, 1, 13, 30, 4, 0.2);
   return { base: s };
 }
 
@@ -643,8 +656,7 @@ export function moodboard(): BufFurniture {
   b.hline(bx + 1, bx + 5, by + 7, MTC_GREEN);
   b.set(bx + 3, by, MTC_AMBER);
   b.outline();
-  for (let yy = y; yy <= y + h + 1; yy++) b.under(x + w, yy, 'rgba(30,34,52,0.16)');
-  for (let xx = x; xx <= x + w; xx++) b.under(xx, y + h + 1, 'rgba(30,34,52,0.16)');
+  wallShadow(b, x - 1, y - 1, w + 2, h + 3);
   return { base: s };
 }
 
